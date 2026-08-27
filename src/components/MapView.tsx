@@ -3,7 +3,7 @@ import maplibregl from "maplibre-gl";
 import type { ImageSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { ManifestGrid } from "../lib/forecast";
-import { renderUvFrame } from "../lib/mapRender";
+import { renderUvFrame, type RenderBounds } from "../lib/mapRender";
 
 interface LatLon {
   lat: number;
@@ -68,7 +68,7 @@ export function MapView({ grid, uv, timeIso, onSelectLocation, userLocation, sel
   // (tens of ms). There are only a handful of hours reachable from the UI
   // (Now..+5h), so caching each rendered frame by timestamp makes
   // switching between already-viewed hours instant.
-  const frameCacheRef = useRef<Map<string, string>>(new Map());
+  const frameCacheRef = useRef<Map<string, { url: string; bounds: RenderBounds }>>(new Map());
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -102,30 +102,30 @@ export function MapView({ grid, uv, timeIso, onSelectLocation, userLocation, sel
     const map = mapRef.current;
     if (!map || !grid || !uv || !timeIso) return;
 
-    let dataUrl = frameCacheRef.current.get(timeIso);
-    if (!dataUrl) {
-      renderUvFrame(canvasRef.current, grid, uv, timeIso);
-      dataUrl = canvasRef.current.toDataURL("image/png");
-      frameCacheRef.current.set(timeIso, dataUrl);
+    let frame = frameCacheRef.current.get(timeIso);
+    if (!frame) {
+      const stats = renderUvFrame(canvasRef.current, grid, uv, timeIso);
+      frame = { url: canvasRef.current.toDataURL("image/png"), bounds: stats.bounds };
+      frameCacheRef.current.set(timeIso, frame);
     }
-
-    const north = grid.lat_start;
-    const south = grid.lat_start + grid.lat_step * (grid.nlat - 1);
-    const west = grid.lon_start;
-    const east = grid.lon_start + grid.lon_step * grid.nlon;
+    const { url: dataUrl, bounds } = frame;
+    // Coordinates come from the same clamped bounds the raster was drawn
+    // to (see renderUvFrame / MERCATOR_LAT_LIMIT) — Web Mercator cannot
+    // represent the true poles, so these must never be the grid's raw
+    // +/-90 extremes.
     const coordinates: [[number, number], [number, number], [number, number], [number, number]] = [
-      [west, north],
-      [east, north],
-      [east, south],
-      [west, south],
+      [bounds.west, bounds.north],
+      [bounds.east, bounds.north],
+      [bounds.east, bounds.south],
+      [bounds.west, bounds.south],
     ];
 
     const apply = () => {
       const existing = map.getSource(SOURCE_ID) as ImageSource | undefined;
       if (existing) {
-        existing.updateImage({ url: dataUrl!, coordinates });
+        existing.updateImage({ url: dataUrl, coordinates });
       } else {
-        map.addSource(SOURCE_ID, { type: "image", url: dataUrl!, coordinates });
+        map.addSource(SOURCE_ID, { type: "image", url: dataUrl, coordinates });
         // Insert below borders/labels (added later in the style) so they
         // stay visible on top of the raster, and above the neutral
         // land/ocean fills (added earlier) so the raster reads as the

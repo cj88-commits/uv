@@ -162,6 +162,18 @@ not a per-country political map with a data overlay bolted on.
   only run once per hour — each rendered frame is cached in memory
   (`frameCacheRef` in `MapView.tsx`) keyed by timestamp, so re-selecting an
   already-viewed hour (e.g. flipping back to "Now") is instant.
+- **Web Mercator cannot represent the poles** (`MercatorCoordinate.fromLngLat`
+  returns `Infinity` at lat=-90 and a huge out-of-range value at lat=+90).
+  A real bug shipped briefly where the `image` source's corner coordinates
+  used the grid's raw +/-90 extent, corrupting the whole image quad's
+  transform (not just the polar pixels) and making the *entire* globe
+  render as night. Fixed by clamping the raster's rendered/displayed
+  latitude bounds to `MERCATOR_LAT_LIMIT` (85.05°, the same limit this
+  app's own basemap tiles use) in `computeUvFrame`, and having
+  `MapView.tsx` build MapLibre's image-source coordinates from that
+  function's *returned* bounds rather than recomputing them separately —
+  so the two can no longer disagree. Regression-tested in
+  `src/lib/mapRender.test.ts`.
 
 ## Frontend data flow
 
