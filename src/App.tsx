@@ -1,0 +1,163 @@
+import { useEffect, useMemo, useState } from "react";
+import { MapView } from "./components/MapView";
+import { TimeControl } from "./components/TimeControl";
+import { LocationPanel } from "./components/LocationPanel";
+import { Legend } from "./components/Legend";
+import { en } from "./locales/en";
+import {
+  loadManifest,
+  loadAllHours,
+  nearestHourIndex,
+  seriesAtLocation,
+  filterToday,
+  type Manifest,
+  type HourlyGrid,
+} from "./lib/forecast";
+import { getDailyUvSummary } from "./lib/uv";
+import { isDaylight } from "./lib/daynight";
+
+const TIME_OFFSETS = [0, 1, 2, 3, 4, 5];
+
+interface LatLon {
+  lat: number;
+  lon: number;
+}
+
+export default function App() {
+  const [manifest, setManifest] = useState<Manifest | null>(null);
+  const [hours, setHours] = useState<Map<string, HourlyGrid> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [nowIso, setNowIso] = useState(() => new Date().toISOString());
+
+  const [selectedOffset, setSelectedOffset] = useState(0);
+  const [selectedLocation, setSelectedLocation] = useState<LatLon | null>(null);
+  const [userLocation, setUserLocation] = useState<LatLon | null>(null);
+  const [geoStatus, setGeoStatus] = useState<"idle" | "locating" | "error">("idle");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const m = await loadManifest();
+        if (cancelled) return;
+        setManifest(m);
+        const h = await loadAllHours(m);
+        if (cancelled) return;
+        setHours(h);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Keep "now" reasonably fresh without polling aggressively.
+  useEffect(() => {
+    const id = setInterval(() => setNowIso(new Date().toISOString()), 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const nowIndex = useMemo(() => (manifest ? nearestHourIndex(manifest, nowIso) : 0), [manifest, nowIso]);
+
+  const availableOffsets = useMemo(() => {
+    if (!manifest) return [];
+    return TIME_OFFSETS.filter((o) => nowIndex + o < manifest.hours.length);
+  }, [manifest, nowIndex]);
+
+  const selectedHourEntry = manifest?.hours[Math.min(nowIndex + selectedOffset, manifest.hours.length - 1)];
+  const selectedHourGrid = selectedHourEntry && hours ? hours.get(selectedHourEntry.time) : undefined;
+
+  function handleSelectLocation(lat: number, lon: number) {
+    setSelectedLocation({ lat, lon });
+  }
+
+  function handleUseMyLocation() {
+    if (!("geolocation" in navigator)) {
+      setGeoStatus("error");
+      return;
+    }
+    setGeoStatus("locating");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const loc = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        setUserLocation(loc);
+        setSelectedLocation(loc);
+        setGeoStatus("idle");
+      },
+      () => setGeoStatus("error"),
+      { enableHighAccuracy: false, timeout: 10_000 }
+    );
+  }
+
+  const locationData = useMemo(() => {
+    if (!manifest || !hours || !selectedLocation || !selectedHourEntry) return null;
+    const series = seriesAtLocation(manifest, hours, selectedLocation.lat, selectedLocation.lon);
+    const today = filterToday(series, selectedLocation.lon, selectedHourEntry.time);
+    const summary = getDailyUvSummary(today.map((s) => ({ time: s.time, uv: s.uv })));
+    const current = series.find((s) => s.time === selectedHourEntry.time) ?? series[0];
+    const day = isDaylight(selectedLocation.lat, selectedLocation.lon, new Date(selectedHourEntry.time));
+    return { current, summary, today, isDay: day };
+  }, [manifest, hours, selectedLocation, selectedHourEntry]);
+
+  const loading = !manifest || !hours;
+
+  return (
+    <div className="app">
+      <header className="app-header">
+        <div className="brand">{en.appName}</div>
+        <div className="tagline">{en.tagline}</div>
+      </header>
+
+      <main className="map-wrap">
+        {error && <div className="banner error">{en.loadError}</div>}
+        {loading && !error && <div className="banner">{en.loadingForecast}</div>}
+
+        <MapView
+          grid={manifest?.grid ?? null}
+          uv={selectedHourGrid?.uv ?? null}
+          timeIso={selectedHourEntry?.time ?? null}
+          onSelectLocation={handleSelectLocation}
+          userLocation={userLocation}
+          selectedLocation={selectedLocation}
+        />
+
+        <Legend />
+
+        <div className="controls">
+          <TimeControl offsets={availableOffsets} selectedOffset={selectedOffset} onSelect={setSelectedOffset} />
+          <button className="locate-btn" onClick={handleUseMyLocation} disabled={geoStatus === "locating"}>
+            {geoStatus === "locating" ? en.locatingYou : en.useMyLocation}
+          </button>
+        </div>
+        {geoStatus === "error" && <div className="banner error small">{en.locationError}</div>}
+
+        <section className="panel-wrap">
+          {!selectedLocation && <p className="click-prompt">{en.clickPrompt}</p>}
+          {selectedLocation && locationData && (
+            <LocationPanel
+              lat={selectedLocation.lat}
+              lon={selectedLocation.lon}
+              isDay={locationData.isDay}
+              uv={locationData.current?.uv ?? 0}
+              uvClear={locationData.current?.uvClear ?? 0}
+              dailySummary={locationData.summary}
+              todaySeriesForThreshold={locationData.today.map((s) => ({ time: s.time, uv: s.uv }))}
+            />
+          )}
+        </section>
+      </main>
+
+      <footer className="app-footer">
+        <p className="intro-text">{en.introText}</p>
+        <p className="limitations">{en.limitationsNote}</p>
+        {manifest && (
+          <p className="attribution">
+            {en.attributionPrefix} {manifest.attribution}. {manifest.licence}.
+          </p>
+        )}
+      </footer>
+    </div>
+  );
+}

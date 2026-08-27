@@ -1,0 +1,48 @@
+name: Refresh CAMS UV data
+
+# Manual only for this MVP — see docs/MVP_ARCHITECTURE.md for why this isn't
+# scheduled yet. Run it from the Actions tab whenever you want fresh data,
+# then it commits public/data/* back to main, which triggers deploy.yml.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install eccodes system library (required by cfgrib)
+        run: sudo apt-get update && sudo apt-get install -y libeccodes-dev
+
+      - run: pip install -r scripts/cams/requirements.txt
+
+      - name: Download latest CAMS forecast (0-24h)
+        working-directory: scripts/cams
+        env:
+          CDSAPI_URL: ${{ secrets.CDSAPI_URL }}
+          CDSAPI_KEY: ${{ secrets.CDSAPI_KEY }}
+        run: python download_forecast.py --hours 24
+
+      - name: Process into static JSON
+        working-directory: scripts/cams
+        run: |
+          RUN=$(cat _raw/forecast.grib.run.txt)
+          python process_forecast.py --grib _raw/forecast.grib --run "$RUN"
+
+      - name: Commit updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/data
+          git diff --cached --quiet && echo "No data changes" && exit 0
+          git commit -m "chore: refresh CAMS UV data"
+          git push

@@ -1,0 +1,281 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b1220;
+  --panel-bg: rgba(17, 24, 39, 0.92);
+  --text: #f3f4f6;
+  --muted: #9ca3af;
+  --accent: #38bdf8;
+  --warn: #ef4444;
+  --ok: #22c55e;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.app-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.tagline {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.map-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 60vh;
+}
+
+.map-container {
+  position: absolute;
+  inset: 0;
+}
+
+.banner {
+  position: absolute;
+  top: 0.6rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--panel-bg);
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  z-index: 5;
+}
+
+.banner.error {
+  border: 1px solid var(--warn);
+}
+
+.banner.small {
+  font-size: 0.75rem;
+}
+
+.legend {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.6rem;
+  background: var(--panel-bg);
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.72rem;
+  z-index: 5;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.controls {
+  position: absolute;
+  left: 50%;
+  bottom: 0.6rem;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  z-index: 5;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100% - 1.2rem);
+}
+
+.time-control {
+  display: flex;
+  gap: 0.25rem;
+  background: var(--panel-bg);
+  border-radius: 999px;
+  padding: 0.25rem;
+}
+
+.time-btn {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.time-btn.selected {
+  background: var(--accent);
+  color: #06202b;
+  font-weight: 600;
+}
+
+.locate-btn {
+  background: var(--panel-bg);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.locate-btn:disabled {
+  opacity: 0.6;
+}
+
+.panel-wrap {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  z-index: 6;
+  max-width: 300px;
+}
+
+.click-prompt {
+  background: var(--panel-bg);
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.location-panel {
+  background: var(--panel-bg);
+  border-radius: 14px;
+  padding: 0.9rem 1rem;
+  display: grid;
+  gap: 0.45rem;
+  border-top: 4px solid var(--muted);
+}
+
+.location-panel.warn {
+  border-top-color: var(--warn);
+}
+
+.location-panel.ok {
+  border-top-color: var(--ok);
+}
+
+.location-panel.night {
+  border-top-color: #334155;
+}
+
+.headline {
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+}
+
+.uv-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.uv-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.uv-category {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.body-text {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.protection-window {
+  color: var(--text);
+}
+
+.peak-block {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 0.4rem;
+}
+
+.peak-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.peak-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.clear-sky {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.coords {
+  font-size: 0.68rem;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.app-footer {
+  padding: 1rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  max-width: 720px;
+}
+
+.intro-text {
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .panel-wrap {
+    top: auto;
+    bottom: 4.2rem;
+    right: 0.6rem;
+    left: 0.6rem;
+    max-width: none;
+  }
+
+  .legend {
+    font-size: 0.65rem;
+  }
+}

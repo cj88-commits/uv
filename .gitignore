@@ -1,0 +1,27 @@
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Raw CAMS downloads — large, regenerable, never committed
+scripts/cams/_raw/
+scripts/cams/_out/
+*.grib
+*.grib.*idx
+
+# Credentials — must never be committed
+.cdsapirc
+.env
+.env.*
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
