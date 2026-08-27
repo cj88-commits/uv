@@ -117,26 +117,51 @@ grid it already has in memory.
 
 ## Map rendering
 
-- Basemap: MapLibre GL JS with the free, no-key `demotiles.maplibre.org`
-  style (country outlines only — deliberately minimal). This is a runtime
-  dependency on a third-party host; acceptable for an MVP, worth revisiting
-  if this becomes a real product (e.g. bundle a static vector style).
-- UV field: for the selected hour, a `<canvas>` (one pixel per grid cell,
-  360×181) is filled directly via `ImageData` — each cell coloured by its
-  standard UV category (`src/lib/mapRender.ts`), or a neutral dark colour
-  if `SunCalc` says the sun is below the horizon there at that timestamp.
-  The canvas is exported once to a data URL and added to MapLibre as an
-  `image` source stretched over the globe; changing the selected hour just
-  calls `source.updateImage(...)` with a freshly rendered canvas.
-- This is a categorical, per-cell map, not a smoothed/interpolated one —
-  it never implies more spatial detail than the CAMS grid actually has.
-  Performance is fine: building one 360×181 frame (including 65,160
-  SunCalc sun-position calls) takes well under the time a button click
-  needs to feel responsive, and it only happens when the user changes the
-  hour, not on every render.
-- Night: computed independently of the UV data via `SunCalc.getPosition`
-  (real solar altitude), not by treating CAMS's near-zero night-time UV as
-  "low UV". This was an explicit project requirement.
+The UV field is the map's primary content — a continuous heat-map raster,
+not a per-country political map with a data overlay bolted on.
+
+- **Basemap**: still MapLibre GL JS with the free, no-key
+  `demotiles.maplibre.org` vector tiles, but its default style (which
+  fills every country with one of eight arbitrary bright colours — a
+  "political map" look) is restyled after load
+  (`src/components/MapView.tsx::restyleBasemap`) to neutral dark land/ocean
+  fills, subtle borders, and readable halo'd labels, so it recedes behind
+  the data. This is a runtime dependency on a third-party host; acceptable
+  for an MVP, worth revisiting if this becomes a real product (e.g. bundle
+  a static vector style). The restyle is wrapped in try/catch and simply
+  no-ops if the upstream style's layer IDs ever change.
+- **UV field** (`src/lib/mapRender.ts`): for the selected hour, a `<canvas>`
+  is filled via `ImageData` at 4x the ~1° CAMS grid's resolution
+  (1440×721 px). Each output pixel is **bilinearly interpolated** from the
+  four nearest CAMS grid cells (both the UV value and, separately, solar
+  altitude — see Night below), then mapped through a **continuous** UV
+  colour ramp (`src/lib/colorRamp.ts`) rather than quantised into five flat
+  category bands, so e.g. UV 3.1 and UV 4.9 render as visibly distinct
+  hues, not identical blocks. The canvas is exported to a data URL and
+  added to MapLibre as an `image` source, inserted *below* the border/label
+  layers but *above* the neutral land/ocean fill, so borders and labels
+  stay legible on top while the raster itself is the dominant layer.
+  Changing the selected hour calls `source.updateImage(...)` with a
+  freshly rendered (or cached — see Performance) canvas.
+- Interpolation is **visual smoothing only** — it never implies the
+  underlying forecast has finer real resolution than the native CAMS grid.
+  It also does not meaningfully shift where high/low UV appears: bilinear
+  interpolation between adjacent 1° cells only ever produces values between
+  their two originals.
+- **Night**: computed independently of the UV data via
+  `SunCalc.getPosition` (real solar altitude in degrees), not by treating
+  CAMS's near-zero night-time UV as "low UV" — an explicit project
+  requirement. Rather than a hard day/night boolean per pixel, altitude
+  itself is bilinearly interpolated and blended into a dark overlay colour
+  over a ±6° band around the horizon, producing a soft, naturally-curved
+  terminator (closer to how the day/night line actually looks from space)
+  instead of a jagged one-grid-cell-wide edge.
+- **Performance** (measured, see the accompanying report for exact
+  numbers): computing the 65,160-point solar-altitude grid and the
+  ~1.04M-pixel bilinear/colour pass together take well under 100ms, and
+  only run once per hour — each rendered frame is cached in memory
+  (`frameCacheRef` in `MapView.tsx`) keyed by timestamp, so re-selecting an
+  already-viewed hour (e.g. flipping back to "Now") is instant.
 
 ## Frontend data flow
 

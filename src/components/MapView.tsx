@@ -22,12 +22,53 @@ interface Props {
 const SOURCE_ID = "uv-field";
 const LAYER_ID = "uv-field-layer";
 
+// The free demotiles.maplibre.org style fills every country with one of a
+// handful of bright, arbitrary colours (a "political map" look) — fine for
+// a generic demo, but it visually competes with a data overlay. We keep
+// using its (free, no-key) vector tiles, but override the paint of a few
+// known layers to a neutral basemap so the UV raster reads as the map's
+// primary content and borders/labels stay legible but secondary. This is
+// applied once the style loads; if the upstream style's layer IDs ever
+// change, this silently no-ops rather than breaking the map.
+function restyleBasemap(map: maplibregl.Map) {
+  const NEUTRAL_OCEAN = "#0f1b2a";
+  const NEUTRAL_LAND = "#26313f";
+  try {
+    map.setPaintProperty("background", "background-color", NEUTRAL_OCEAN);
+    map.setPaintProperty("countries-fill", "fill-color", NEUTRAL_LAND);
+    map.setPaintProperty("crimea-fill", "fill-color", NEUTRAL_LAND);
+    map.setPaintProperty("coastline", "line-color", "rgba(255,255,255,0.12)");
+    map.setPaintProperty("coastline", "line-width", 1);
+    map.setPaintProperty("countries-boundary", "line-color", "rgba(255,255,255,0.35)");
+    map.setPaintProperty("countries-boundary", "line-width", 0.6);
+    map.setPaintProperty("countries-boundary", "line-opacity", 1);
+    map.setPaintProperty("geolines", "line-color", "rgba(255,255,255,0.3)");
+    map.setPaintProperty("countries-label", "text-color", "#ffffff");
+    map.setPaintProperty("countries-label", "text-halo-color", "rgba(0,0,0,0.75)");
+    map.setPaintProperty("countries-label", "text-halo-width", 1.4);
+    map.setPaintProperty("geolines-label", "text-color", "#bcd6e6");
+    map.setPaintProperty("geolines-label", "text-halo-color", "rgba(0,0,0,0.7)");
+    map.setPaintProperty("geolines-label", "text-halo-width", 1.2);
+    // Crimea is a separate fill layer drawn last in the upstream style
+    // (above labels); move it back down with the other neutral fills so
+    // it doesn't sit as a stray coloured patch above the raster and labels.
+    map.moveLayer("crimea-fill", "countries-boundary");
+  } catch {
+    // Upstream style shape changed — keep the default look rather than crash.
+  }
+}
+
 export function MapView({ grid, uv, timeIso, onSelectLocation, userLocation, selectedLocation }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
   const userMarkerRef = useRef<maplibregl.Marker | null>(null);
   const selectedMarkerRef = useRef<maplibregl.Marker | null>(null);
+  // Rendering a frame does a full bilinear resample + sun-position pass
+  // (tens of ms). There are only a handful of hours reachable from the UI
+  // (Now..+5h), so caching each rendered frame by timestamp makes
+  // switching between already-viewed hours instant.
+  const frameCacheRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -42,6 +83,7 @@ export function MapView({ grid, uv, timeIso, onSelectLocation, userLocation, sel
     });
     map.addControl(new maplibregl.AttributionControl({ compact: true }));
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.once("load", () => restyleBasemap(map));
 
     map.on("click", (e) => {
       onSelectLocation(e.lngLat.lat, e.lngLat.lng);
@@ -60,8 +102,12 @@ export function MapView({ grid, uv, timeIso, onSelectLocation, userLocation, sel
     const map = mapRef.current;
     if (!map || !grid || !uv || !timeIso) return;
 
-    renderUvFrame(canvasRef.current, grid, uv, timeIso);
-    const dataUrl = canvasRef.current.toDataURL("image/png");
+    let dataUrl = frameCacheRef.current.get(timeIso);
+    if (!dataUrl) {
+      renderUvFrame(canvasRef.current, grid, uv, timeIso);
+      dataUrl = canvasRef.current.toDataURL("image/png");
+      frameCacheRef.current.set(timeIso, dataUrl);
+    }
 
     const north = grid.lat_start;
     const south = grid.lat_start + grid.lat_step * (grid.nlat - 1);
@@ -77,10 +123,17 @@ export function MapView({ grid, uv, timeIso, onSelectLocation, userLocation, sel
     const apply = () => {
       const existing = map.getSource(SOURCE_ID) as ImageSource | undefined;
       if (existing) {
-        existing.updateImage({ url: dataUrl, coordinates });
+        existing.updateImage({ url: dataUrl!, coordinates });
       } else {
-        map.addSource(SOURCE_ID, { type: "image", url: dataUrl, coordinates });
-        map.addLayer({ id: LAYER_ID, type: "raster", source: SOURCE_ID, paint: { "raster-fade-duration": 0 } });
+        map.addSource(SOURCE_ID, { type: "image", url: dataUrl!, coordinates });
+        // Insert below borders/labels (added later in the style) so they
+        // stay visible on top of the raster, and above the neutral
+        // land/ocean fills (added earlier) so the raster reads as the
+        // map's dominant layer.
+        map.addLayer(
+          { id: LAYER_ID, type: "raster", source: SOURCE_ID, paint: { "raster-fade-duration": 0 } },
+          map.getLayer("countries-boundary") ? "countries-boundary" : undefined
+        );
       }
     };
 
