@@ -57,10 +57,10 @@ so `npm run dev` works immediately without needing CAMS credentials.
    cd scripts/cams
    python poc_download.py
    ```
-7. Once that works, fetch the full global 0-24h dataset and turn it into
+7. Once that works, fetch the full global 0-36h dataset and turn it into
    the static files the frontend reads:
    ```bash
-   python download_forecast.py --hours 24
+   python download_forecast.py --hours 36
    RUN=$(cat _raw/forecast.grib.run.txt)
    python process_forecast.py --grib _raw/forecast.grib --run "$RUN"
    ```

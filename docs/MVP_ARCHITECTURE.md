@@ -12,7 +12,7 @@ CAMS (Copernicus ADS)
    │  cdsapi, GRIB, uvbed + uvbedcs
    ▼
 scripts/cams/download_forecast.py   (Python)
-   │  raw GRIB, 0-24h leadtime, global, most recent 00/12 UTC run
+   │  raw GRIB, 0-36h leadtime, global, most recent 00/12 UTC run
    ▼
 scripts/cams/process_forecast.py    (Python)
    │  decode GRIB -> UV Index (uvbed x 40) -> thin 0.4° grid to 1° grid
@@ -47,11 +47,11 @@ for a 120 h horizon, twice daily. `UV Index = doseRate × 40`.
   0-3, prints diagnostics (timestamps, grid shape, min/max UV, file sizes).
   Run this first to confirm credentials and the processing logic work.
 - `download_forecast.py` — the real MVP download: **global** area,
-  leadtime hours **0-24** (not the full 120 h horizon — this MVP only needs
+  leadtime hours **0-36** (not the full 120 h horizon — this MVP only needs
   "today", and a smaller download is cheaper and faster to iterate on),
   picks the most recently-published 00/12 UTC run automatically (with a
   latency allowance, and a fallback to an older run if the newest one
-  isn't published yet).
+  isn't published yet). 36h rather than 24h is deliberate — see below.
 - `process_forecast.py` — reads the GRIB with `cfgrib`, extracts `uvbed`
   and `uvbedcs`, converts to UV Index, **thins** (nearest-neighbour
   selection, not interpolation) the native 0.4° grid down to a 1°
@@ -62,9 +62,15 @@ Why 1° instead of the native 0.4°: it cuts each hourly file's size by
 map (CAMS itself is already a ~40 km-cell forecast, not a sensor grid).
 This is disclosed to users, not hidden.
 
-Why 0-24h and not the full 120h horizon: the app only needs "today's peak"
+Why 0-36h and not the full 120h horizon: the app only needs "today's peak"
 and a handful of near-term hours. Fetching 120h of global hourly data would
-be ~5x the size for data the MVP doesn't use yet.
+be ~3-4x the size for data the MVP doesn't use yet.
+
+Why 36h and not 24h: verified against a real download, this dataset's
+publish latency can exceed 12h — the freshest run available was sometimes
+already ~22h old. A 24h fetch in that situation left almost no "+1h..+5h"
+lookahead by the time the data was actually used; 36h keeps a real buffer
+without meaningfully increasing file size.
 
 ## Generated data format
 
@@ -184,9 +190,11 @@ version later if the MVP proves worth investing further in.
   India, parts of Australia) the local "today" cutoff can be off by up to
   ~30-40 minutes. This only matters right at midnight; it doesn't affect
   midday peak values.
-- **Forecast horizon fetched**: only 0-24h from the most recent run, so a
-  stale (not-yet-refreshed) dataset can leave less than a full day of
-  "today" for locations far ahead of the run's UTC day.
+- **Forecast horizon fetched**: only 0-36h from the most recent run, so a
+  stale (not-yet-refreshed) dataset can still leave less than a full day of
+  "today" for locations far ahead of the run's UTC day, or fewer than the
+  full +1h..+5h options if the run being used is already old (observed in
+  practice: this dataset's publish latency can exceed 12h).
 - **Forecast, not observation**: this is CAMS model guidance (which
   already includes forecast cloud cover), not a live UV sensor reading.
   Local, fast-moving cloud will make the real UV at a given moment differ

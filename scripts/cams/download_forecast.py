@@ -1,15 +1,16 @@
-"""Download a global CAMS UV forecast (uvbed + uvbedcs) for hours 0-24 of the
+"""Download a global CAMS UV forecast (uvbed + uvbedcs) for hours 0-36 of the
 most recent available run.
 
 This is the "real" MVP download step, run after poc_download.py has proven
-the pipeline works. It intentionally limits the horizon to 0-24h: that is
-already enough to compute "today's peak / protection window" for any
-longitude relative to the run's validity, keeps the download small, and
-avoids requesting the full 120h horizon this MVP doesn't need (see
-docs/MVP_ARCHITECTURE.md).
+the pipeline works. It intentionally limits the horizon to 0-36h rather than
+the full 120h this MVP doesn't need (see docs/MVP_ARCHITECTURE.md). 36h (not
+24h) is deliberate: observed real-world publish latency for this dataset can
+be well over 12h, so by the time a run is downloaded and used it may already
+be ~24h past its base time — a 24h fetch would then leave almost no "+1h..+5h"
+lookahead. 36h keeps a healthy buffer for that.
 
 Usage:
-    python download_forecast.py [--hours 24] [--out _raw/forecast.grib]
+    python download_forecast.py [--hours 36] [--out _raw/forecast.grib]
 """
 from __future__ import annotations
 
@@ -72,8 +73,8 @@ def download_with_fallback(hours: int, out_path: str, max_tries: int = 3) -> tup
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--hours", type=int, default=24,
-                         help="Leadtime hours to fetch, 0..N (default 24)")
+    parser.add_argument("--hours", type=int, default=36,
+                         help="Leadtime hours to fetch, 0..N (default 36)")
     parser.add_argument("--out", default=os.path.join(RAW_DIR, "forecast.grib"))
     args = parser.parse_args()
 
