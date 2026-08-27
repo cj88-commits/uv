@@ -15,6 +15,7 @@ import {
 } from "./lib/forecast";
 import { getDailyUvSummary } from "./lib/uv";
 import { isDaylight } from "./lib/daynight";
+import { loadLandMask, type LandMask } from "./lib/landMask";
 
 const TIME_OFFSETS = [0, 1, 2, 3, 4, 5];
 
@@ -26,6 +27,7 @@ interface LatLon {
 export default function App() {
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [hours, setHours] = useState<Map<string, HourlyGrid> | null>(null);
+  const [landMask, setLandMask] = useState<LandMask | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [nowIso, setNowIso] = useState(() => new Date().toISOString());
 
@@ -38,9 +40,10 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
-        const m = await loadManifest();
+        const [m, mask] = await Promise.all([loadManifest(), loadLandMask()]);
         if (cancelled) return;
         setManifest(m);
+        setLandMask(mask);
         const h = await loadAllHours(m);
         if (cancelled) return;
         setHours(h);
@@ -101,7 +104,7 @@ export default function App() {
     return { current, summary, today, isDay: day };
   }, [manifest, hours, selectedLocation, selectedHourEntry]);
 
-  const loading = !manifest || !hours;
+  const loading = !manifest || !hours || !landMask;
 
   return (
     <div className="app">
@@ -118,6 +121,7 @@ export default function App() {
           grid={manifest?.grid ?? null}
           uv={selectedHourGrid?.uv ?? null}
           timeIso={selectedHourEntry?.time ?? null}
+          landMask={landMask}
           onSelectLocation={handleSelectLocation}
           userLocation={userLocation}
           selectedLocation={selectedLocation}

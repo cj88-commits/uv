@@ -4,6 +4,7 @@ import type { ImageSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { ManifestGrid } from "../lib/forecast";
 import { renderUvFrame, type RenderBounds } from "../lib/mapRender";
+import type { LandMask } from "../lib/landMask";
 
 interface LatLon {
   lat: number;
@@ -14,6 +15,7 @@ interface Props {
   grid: ManifestGrid | null;
   uv: Float32Array | null;
   timeIso: string | null;
+  landMask: LandMask | null;
   onSelectLocation: (lat: number, lon: number) => void;
   userLocation: LatLon | null;
   selectedLocation: LatLon | null;
@@ -58,7 +60,7 @@ function restyleBasemap(map: maplibregl.Map) {
   }
 }
 
-export function MapView({ grid, uv, timeIso, onSelectLocation, userLocation, selectedLocation }: Props) {
+export function MapView({ grid, uv, timeIso, landMask, onSelectLocation, userLocation, selectedLocation }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
@@ -100,11 +102,11 @@ export function MapView({ grid, uv, timeIso, onSelectLocation, userLocation, sel
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !grid || !uv || !timeIso) return;
+    if (!map || !grid || !uv || !timeIso || !landMask) return;
 
     let frame = frameCacheRef.current.get(timeIso);
     if (!frame) {
-      const stats = renderUvFrame(canvasRef.current, grid, uv, timeIso);
+      const stats = renderUvFrame(canvasRef.current, grid, uv, timeIso, landMask);
       frame = { url: canvasRef.current.toDataURL("image/png"), bounds: stats.bounds };
       frameCacheRef.current.set(timeIso, frame);
     }
@@ -139,7 +141,7 @@ export function MapView({ grid, uv, timeIso, onSelectLocation, userLocation, sel
 
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
-  }, [grid, uv, timeIso]);
+  }, [grid, uv, timeIso, landMask]);
 
   useEffect(() => {
     const map = mapRef.current;

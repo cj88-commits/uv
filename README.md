@@ -23,10 +23,15 @@ reads directly. No backend, no database — see "Data architecture" below.
 
 ```bash
 npm install
-npm test        # Vitest — UV math, categories, protection window, parsing
+npm test        # Vitest — UV math, categories, protection window, parsing, land mask
 npm run dev     # http://localhost:5173
 npm run build   # type-check + production build to dist/
 ```
+
+The UV heat-map is clipped to land only (oceans show the plain basemap) using
+a precomputed land/ocean mask committed at `public/data/land-mask.png`. It's
+generated once from Natural Earth coastlines and rarely needs regenerating —
+see `npm run generate:landmask` and `docs/MVP_ARCHITECTURE.md`.
 
 The frontend reads forecast data from `public/data/manifest.json` and
 `public/data/hourly/*.json`. Those files are committed to the repo (they're

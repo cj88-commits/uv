@@ -1,10 +1,7 @@
 import SunCalc from "suncalc";
 import { continuousUvColor } from "./colorRamp";
 import type { ManifestGrid } from "./forecast";
-
-// Muted, near-black overlay used for the night side of the globe. Night is
-// a distinct visual state, not just "the lowest UV colour".
-export const NIGHT_COLOR: [number, number, number] = [8, 12, 20];
+import { sampleLandMask, type LandMask } from "./landMask";
 
 // Output raster resolution: an integer multiple of the ~1 deg CAMS grid,
 // upsampled purely for visual smoothness via bilinear interpolation. This
@@ -29,8 +26,9 @@ export const MERCATOR_LAT_LIMIT = 85.05;
 // Sanity thresholds, not scientific ones: CAMS itself already implies "the
 // sun must be up here" once its UV value is meaningfully above zero. If the
 // independently-computed solar altitude disagrees strongly enough to call
-// a point deep night anyway, that's a bug in the day/night calculation, not
-// a real phenomenon.
+// a (land) point deep night anyway, that's a bug in the day/night
+// calculation, not a real phenomenon. (Ocean is skipped entirely before
+// this check, so it only ever applies to land.)
 const MEANINGFUL_UV = 0.5;
 const DEEP_NIGHT_DAY_FACTOR = 0.05;
 
@@ -100,17 +98,25 @@ export interface UvFrame {
 }
 
 /**
- * Pure computation of one hourly UV grid as a continuous heat-map raster:
- * bilinear interpolation between neighbouring CAMS cells (visual smoothing
- * only, never implying finer real resolution), a continuous UV colour ramp
- * (src/lib/colorRamp.ts) rather than flat category bands, and a soft
- * day/night terminator derived from real solar altitude (SunCalc). Has no
- * DOM/canvas dependency so it can be unit-tested directly.
+ * Pure computation of one hourly UV grid as a continuous heat-map raster,
+ * clipped to land: bilinear interpolation between neighbouring CAMS cells
+ * (visual smoothing only, never implying finer real resolution), a
+ * continuous UV colour ramp (src/lib/colorRamp.ts) rather than flat
+ * category bands, and a soft day/night fade derived from real solar
+ * altitude (SunCalc). Has no DOM/canvas dependency so it can be
+ * unit-tested directly.
+ *
+ * Ocean pixels are always fully transparent (alpha = 0), day or night —
+ * the UV overlay is a land-only heat map; the basemap supplies the ocean.
+ * Night land is also transparent (fading smoothly as the sun sets),
+ * revealing the basemap's own (static, neutral) land colour underneath
+ * rather than being tinted by this renderer.
  */
 export function computeUvFrame(
   grid: ManifestGrid,
   uv: Float32Array,
   timeIso: string,
+  landMask: LandMask,
   scale = OUTPUT_SCALE
 ): UvFrame {
   const outW = grid.nlon * scale;
@@ -135,6 +141,11 @@ export function computeUvFrame(
     const lat = north + ((south - north) * py) / (outH - 1);
     for (let px = 0; px < outW; px++) {
       const lon = west + ((east - west) * px) / outW;
+      const idx = (py * outW + px) * 4;
+
+      if (!sampleLandMask(landMask, lat, lon)) {
+        continue; // ocean: alpha stays 0 (Uint8ClampedArray default)
+      }
 
       const uvVal = bilinear(uv, grid, lat, lon);
       const altitude = bilinear(altitudeGrid, grid, lat, lon);
@@ -145,11 +156,10 @@ export function computeUvFrame(
         hadNightInconsistency = true;
       }
 
-      const idx = (py * outW + px) * 4;
-      rgba[idx] = NIGHT_COLOR[0] + (r - NIGHT_COLOR[0]) * dayFactor;
-      rgba[idx + 1] = NIGHT_COLOR[1] + (g - NIGHT_COLOR[1]) * dayFactor;
-      rgba[idx + 2] = NIGHT_COLOR[2] + (b - NIGHT_COLOR[2]) * dayFactor;
-      rgba[idx + 3] = 255;
+      rgba[idx] = r;
+      rgba[idx + 1] = g;
+      rgba[idx + 2] = b;
+      rgba[idx + 3] = Math.round(255 * dayFactor);
     }
   }
   const t2 = performance.now();
@@ -191,10 +201,11 @@ export function renderUvFrame(
   grid: ManifestGrid,
   uv: Float32Array,
   timeIso: string,
+  landMask: LandMask,
   scale = OUTPUT_SCALE
 ): RenderStats {
   const t0 = performance.now();
-  const frame = computeUvFrame(grid, uv, timeIso, scale);
+  const frame = computeUvFrame(grid, uv, timeIso, landMask, scale);
 
   canvas.width = frame.width;
   canvas.height = frame.height;

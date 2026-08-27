@@ -1,11 +1,23 @@
 import { describe, it, expect } from "vitest";
+import { PNG } from "pngjs";
+import fs from "node:fs";
+import path from "node:path";
 import SunCalc from "suncalc";
-import { computeUvFrame, sampleFramePixel, NIGHT_COLOR, MERCATOR_LAT_LIMIT } from "./mapRender";
+import { computeUvFrame, sampleFramePixel, MERCATOR_LAT_LIMIT } from "./mapRender";
+import { decodeLandMaskFromRgba, type LandMask } from "./landMask";
 import type { ManifestGrid } from "./forecast";
 
-// A grid matching the real production shape (1 deg, full globe), so the
-// Web Mercator pole-clamping bug (bounds using the raw +/-90 grid extent)
-// is exercised exactly as it happens in production, not just in a toy grid.
+// Loads the real, committed land mask (not a synthetic one) so these tests
+// exercise actual coastlines, per the requirement that land/ocean
+// verification use real geography, not a toy fixture.
+function loadRealLandMaskForTest(): LandMask {
+  const buf = fs.readFileSync(path.join(__dirname, "..", "..", "public", "data", "land-mask.png"));
+  const png = PNG.sync.read(buf);
+  return decodeLandMaskFromRgba(png.data, png.width, png.height);
+}
+
+const REAL_LAND_MASK = loadRealLandMaskForTest();
+
 const GRID: ManifestGrid = {
   lat_start: 90,
   lat_step: -1,
@@ -19,9 +31,7 @@ const GRID: ManifestGrid = {
 
 // A representative, physically-consistent UV field: derived from the same
 // real solar altitude CAMS itself would reflect, so it is exactly zero
-// wherever the sun is below the horizon (like real CAMS data) rather than
-// an arbitrary time-of-day curve that could disagree with the true
-// terminator and spuriously trip the inconsistency fail-safe under test.
+// wherever the sun is below the horizon (like real CAMS data).
 function makeUvGrid(peak: number, timeIso: string): Float32Array {
   const date = new Date(timeIso);
   const out = new Float32Array(GRID.nlat * GRID.nlon);
@@ -36,28 +46,20 @@ function makeUvGrid(peak: number, timeIso: string): Float32Array {
   return out;
 }
 
-// 12:00 UTC: solar noon near the Greenwich meridian, so Europe/Africa are
-// reliably daylight. UTC-7/UTC+9/UTC+10 zones are reliably pre-dawn/night
-// at this instant. Known, stable reference points (verified against real
-// SunCalc altitude, not assumed).
-const NOON_UTC = "2026-06-15T12:00:00Z";
+const NOON_UTC = "2026-06-15T12:00:00Z"; // Europe/Africa daylight, W. USA/Pacific night
 
 const LONDON: [number, number] = [51.5, -0.1];
 const KINSHASA: [number, number] = [-4.3, 15.3];
-const LOS_ANGELES: [number, number] = [34.0, -118.2]; // ~05:00 PDT
-const SYDNEY: [number, number] = [-33.9, 151.2]; // ~22:00 AEST
-
-function isNightColor(rgba: [number, number, number, number], tolerance = 20): boolean {
-  return (
-    Math.abs(rgba[0] - NIGHT_COLOR[0]) <= tolerance &&
-    Math.abs(rgba[1] - NIGHT_COLOR[1]) <= tolerance &&
-    Math.abs(rgba[2] - NIGHT_COLOR[2]) <= tolerance
-  );
-}
+const CENTRAL_USA: [number, number] = [40, -100];
+const CENTRAL_AUSTRALIA: [number, number] = [-25, 135];
+const LOS_ANGELES: [number, number] = [34.0, -118.2]; // ~05:00 PDT, land, night
+const CENTRAL_ATLANTIC: [number, number] = [10, -40];
+const CENTRAL_PACIFIC: [number, number] = [0, -160];
+const CENTRAL_INDIAN_OCEAN: [number, number] = [-10, 80];
 
 describe("computeUvFrame — Mercator pole clamp (regression: whole globe rendered as night)", () => {
   it("never returns raw +/-90 bounds, even though the grid itself spans +/-90", () => {
-    const frame = computeUvFrame(GRID, makeUvGrid(8, NOON_UTC), NOON_UTC);
+    const frame = computeUvFrame(GRID, makeUvGrid(8, NOON_UTC), NOON_UTC, REAL_LAND_MASK);
     expect(frame.bounds.north).toBeLessThan(90);
     expect(frame.bounds.south).toBeGreaterThan(-90);
     expect(frame.bounds.north).toBeLessThanOrEqual(MERCATOR_LAT_LIMIT);
@@ -65,68 +67,90 @@ describe("computeUvFrame — Mercator pole clamp (regression: whole globe render
   });
 });
 
-describe("computeUvFrame — day/night split", () => {
-  it("has some daylight pixels and some night pixels for a representative timestamp", () => {
-    const frame = computeUvFrame(GRID, makeUvGrid(8, NOON_UTC), NOON_UTC);
-    let dayCount = 0;
-    let nightCount = 0;
-    for (let i = 0; i < frame.rgba.length; i += 4) {
-      const px: [number, number, number, number] = [frame.rgba[i], frame.rgba[i + 1], frame.rgba[i + 2], frame.rgba[i + 3]];
-      if (isNightColor(px)) nightCount++;
-      else dayCount++;
+describe("computeUvFrame — land-only masking (regression: UV colouring the ocean)", () => {
+  it("makes ocean fully transparent regardless of day or night", () => {
+    const dayFrame = computeUvFrame(GRID, makeUvGrid(8, NOON_UTC), NOON_UTC, REAL_LAND_MASK);
+    const midnightUtc = "2026-06-15T00:00:00Z";
+    const nightFrame = computeUvFrame(GRID, makeUvGrid(8, midnightUtc), midnightUtc, REAL_LAND_MASK);
+
+    for (const [lat, lon] of [CENTRAL_ATLANTIC, CENTRAL_PACIFIC, CENTRAL_INDIAN_OCEAN]) {
+      expect(sampleFramePixel(dayFrame, lat, lon)[3]).toBe(0);
+      expect(sampleFramePixel(nightFrame, lat, lon)[3]).toBe(0);
     }
-    expect(dayCount).toBeGreaterThan(0);
-    expect(nightCount).toBeGreaterThan(0);
   });
 
-  it("does not classify the entire raster as night when meaningful UV exists", () => {
-    const frame = computeUvFrame(GRID, makeUvGrid(8, NOON_UTC), NOON_UTC);
-    expect(frame.hadNightInconsistency).toBe(false);
-
-    let nonNightCount = 0;
-    for (let i = 0; i < frame.rgba.length; i += 4) {
-      const px: [number, number, number, number] = [frame.rgba[i], frame.rgba[i + 1], frame.rgba[i + 2], frame.rgba[i + 3]];
-      if (!isNightColor(px)) nonNightCount++;
+  it("gives daytime land meaningful alpha and UV colour", () => {
+    // At 12:00 UTC, London/Kinshasa/central USA are all in daylight.
+    // (Central Australia is nighttime at this instant — see the
+    // opposite-side-of-Earth test below instead.)
+    const frame = computeUvFrame(GRID, makeUvGrid(8, NOON_UTC), NOON_UTC, REAL_LAND_MASK);
+    for (const [lat, lon] of [LONDON, KINSHASA, CENTRAL_USA]) {
+      const [, , , alpha] = sampleFramePixel(frame, lat, lon);
+      expect(alpha).toBeGreaterThan(0);
     }
-    // Roughly half the globe should be lit at any instant.
-    expect(nonNightCount).toBeGreaterThan(frame.rgba.length / 4 / 4);
   });
 
-  it("known locations on opposite sides of Earth produce different solar states", () => {
-    const frame = computeUvFrame(GRID, makeUvGrid(8, NOON_UTC), NOON_UTC);
+  it("fades nighttime land toward transparent instead of tinting it", () => {
+    const frame = computeUvFrame(GRID, makeUvGrid(8, NOON_UTC), NOON_UTC, REAL_LAND_MASK);
+    const [, , , alpha] = sampleFramePixel(frame, ...LOS_ANGELES);
+    expect(alpha).toBeLessThan(20);
+  });
+
+  it("never produces a global colour band spanning both land and ocean", () => {
+    // The historical bug: a giant coloured rectangle covering everything.
+    // Verify ocean next to daylight land is still transparent.
+    const frame = computeUvFrame(GRID, makeUvGrid(8, NOON_UTC), NOON_UTC, REAL_LAND_MASK);
+    const atlanticNextToAfrica = sampleFramePixel(frame, 0, -10); // ocean, between Africa and South America
+    expect(atlanticNextToAfrica[3]).toBe(0);
+    const kinshasa = sampleFramePixel(frame, ...KINSHASA);
+    expect(kinshasa[3]).toBeGreaterThan(0);
+  });
+});
+
+describe("computeUvFrame — final raster alpha at named ocean coordinates", () => {
+  it.each([
+    ["central Atlantic", 0, -40],
+    ["central Pacific", 0, -160],
+    ["central Indian Ocean", -10, 80],
+  ] as const)("%s has alpha = 0 in the final raster", (_name, lat, lon) => {
+    const frame = computeUvFrame(GRID, makeUvGrid(8, NOON_UTC), NOON_UTC, REAL_LAND_MASK);
+    expect(sampleFramePixel(frame, lat, lon)[3]).toBe(0);
+  });
+
+  it("daytime Africa has alpha > 0", () => {
+    const frame = computeUvFrame(GRID, makeUvGrid(8, NOON_UTC), NOON_UTC, REAL_LAND_MASK);
+    expect(sampleFramePixel(frame, ...KINSHASA)[3]).toBeGreaterThan(0);
+  });
+});
+
+describe("computeUvFrame — day/night on land", () => {
+  it("known opposite-side-of-Earth land locations produce different solar states", () => {
+    const frame = computeUvFrame(GRID, makeUvGrid(8, NOON_UTC), NOON_UTC, REAL_LAND_MASK);
+    const london = sampleFramePixel(frame, ...LONDON)[3];
+    const losAngeles = sampleFramePixel(frame, ...LOS_ANGELES)[3];
+    const australia = sampleFramePixel(frame, ...CENTRAL_AUSTRALIA)[3];
+    expect(london).toBeGreaterThan(200);
+    expect(losAngeles).toBeLessThan(20);
+    expect(australia).toBeLessThan(20);
+  });
+
+  it("retains distinguishable UV colours on daylight land (not flattened by masking)", () => {
+    const frame = computeUvFrame(GRID, makeUvGrid(8, NOON_UTC), NOON_UTC, REAL_LAND_MASK);
     const london = sampleFramePixel(frame, ...LONDON);
     const kinshasa = sampleFramePixel(frame, ...KINSHASA);
-    const losAngeles = sampleFramePixel(frame, ...LOS_ANGELES);
-    const sydney = sampleFramePixel(frame, ...SYDNEY);
-
-    expect(isNightColor(london)).toBe(false);
-    expect(isNightColor(kinshasa)).toBe(false);
-    expect(isNightColor(losAngeles)).toBe(true);
-    expect(isNightColor(sydney)).toBe(true);
-  });
-
-  it("retains distinguishable UV colours (not just night/not-night) on the daylight side", () => {
-    const frame = computeUvFrame(GRID, makeUvGrid(8, NOON_UTC), NOON_UTC);
-    const london = sampleFramePixel(frame, ...LONDON); // mid latitude, moderate-ish UV
-    const kinshasa = sampleFramePixel(frame, ...KINSHASA); // near-equatorial, high UV
-    // Different UV levels in daylight should not collapse to the same colour.
     expect(london).not.toEqual(kinshasa);
   });
 });
 
 describe("computeUvFrame — inconsistency fail-safe", () => {
-  it("flags a location with meaningful UV that the solar calculation misclassifies as deep night", () => {
-    // Pathological input: a UV field that is high everywhere, including
-    // where it is genuinely night. This should never happen with real
-    // CAMS data (CAMS itself reports near-zero UV at night), but the
-    // fail-safe must still catch the inconsistency if it ever does.
+  it("flags a land location with meaningful UV that the solar calculation misclassifies as deep night", () => {
     const allHighUv = new Float32Array(GRID.nlat * GRID.nlon).fill(9);
-    const frame = computeUvFrame(GRID, allHighUv, NOON_UTC);
+    const frame = computeUvFrame(GRID, allHighUv, NOON_UTC, REAL_LAND_MASK);
     expect(frame.hadNightInconsistency).toBe(true);
   });
 
   it("does not flag a physically consistent field (UV ~0 at night)", () => {
-    const frame = computeUvFrame(GRID, makeUvGrid(8, NOON_UTC), NOON_UTC);
+    const frame = computeUvFrame(GRID, makeUvGrid(8, NOON_UTC), NOON_UTC, REAL_LAND_MASK);
     expect(frame.hadNightInconsistency).toBe(false);
   });
 });

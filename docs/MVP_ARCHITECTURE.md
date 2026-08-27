@@ -152,10 +152,30 @@ not a per-country political map with a data overlay bolted on.
   `SunCalc.getPosition` (real solar altitude in degrees), not by treating
   CAMS's near-zero night-time UV as "low UV" — an explicit project
   requirement. Rather than a hard day/night boolean per pixel, altitude
-  itself is bilinearly interpolated and blended into a dark overlay colour
-  over a ±6° band around the horizon, producing a soft, naturally-curved
-  terminator (closer to how the day/night line actually looks from space)
-  instead of a jagged one-grid-cell-wide edge.
+  itself is bilinearly interpolated into a `dayFactor` over a ±6° band
+  around the horizon (a soft, naturally-curved terminator, not a jagged
+  one-grid-cell edge). On land, `dayFactor` drives the pixel's **alpha**
+  (full UV colour in daylight, fading to fully transparent — revealing the
+  basemap's own static land colour — at night); it is never used to tint
+  the pixel toward a "night colour", and it has no effect on ocean at all
+  (see Land masking below).
+- **Land masking** (`src/lib/landMask.ts`,
+  `scripts/landmask/generate-land-mask.mjs`): the UV overlay is painted
+  **only on land** — the ocean is always fully transparent (alpha 0),
+  day or night, so it never carries a UV tint and the basemap's ocean
+  styling shows through unchanged. A precomputed raster (`public/data/
+  land-mask.png`, white = land / black = ocean, 1440×721 — the same
+  extent and resolution as the UV raster) is generated **once**, offline,
+  from Natural Earth land polygons (`world-atlas`'s 50m dataset) via a
+  scanline polygon fill (not per-pixel point-in-polygon, which would be
+  far too slow at ~1M pixels — see the script for the antimeridian-edge
+  handling this required to avoid corrupting the fill). At runtime the app
+  fetches this PNG once, decodes it to a `Uint8Array` via canvas, and
+  `computeUvFrame` looks up each output pixel's land/ocean state before
+  deciding whether to draw anything there at all — ocean pixels are
+  `continue`'d immediately, leaving alpha at its default of 0. Regenerate
+  the mask with `npm run generate:landmask` (rarely needed — it depends
+  only on coastlines, not on CAMS data).
 - **Performance** (measured, see the accompanying report for exact
   numbers): computing the 65,160-point solar-altitude grid and the
   ~1.04M-pixel bilinear/colour pass together take well under 100ms, and
@@ -242,6 +262,13 @@ version later if the MVP proves worth investing further in.
   style at runtime; not self-hosted.
 - **No automatic data refresh**: refreshing CAMS data is a manual Action
   trigger (or local run), not a cron job.
+- **Land mask resolution**: Natural Earth 50m polygons at 1440×721 —
+  coastlines are visually accurate at normal map zoom (verified for
+  Britain/Ireland, Scandinavia, Japan, the Philippines, Indonesia) but not
+  survey-precise; very small islands/reefs may be a pixel or two off or
+  missing entirely. CAMS UV values are still available for ocean points on
+  click — only the map's visual overlay is land-clipped, per the project's
+  explicit requirement not to lose ocean data, just its display.
 
 ## What would need to change for production
 
