@@ -187,13 +187,40 @@ not a per-country political map with a data overlay bolted on.
   A real bug shipped briefly where the `image` source's corner coordinates
   used the grid's raw +/-90 extent, corrupting the whole image quad's
   transform (not just the polar pixels) and making the *entire* globe
-  render as night. Fixed by clamping the raster's rendered/displayed
-  latitude bounds to `MERCATOR_LAT_LIMIT` (85.05°, the same limit this
-  app's own basemap tiles use) in `computeUvFrame`, and having
-  `MapView.tsx` build MapLibre's image-source coordinates from that
-  function's *returned* bounds rather than recomputing them separately —
-  so the two can no longer disagree. Regression-tested in
-  `src/lib/mapRender.test.ts`.
+  render as night. Fixed by clamping the raster's bounds to
+  `MERCATOR_LAT_LIMIT` (the exact Web Mercator latitude limit,
+  `atan(sinh(pi))` in degrees ≈ 85.0511288°, derived rather than
+  approximated) in `computeUvFrame`, and having `MapView.tsx` build
+  MapLibre's image-source coordinates from that function's *returned*
+  bounds rather than recomputing them separately.
+- **The raster's row spacing must itself be in Web Mercator, not
+  equirectangular.** A second, separate bug: even with correct corner
+  bounds, `computeUvFrame` was placing row `py` at a latitude *linear* in
+  `py` (`lat = north + (south-north)*py/(h-1)`). MapLibre's `image` source
+  stretches the bitmap *linearly in Web Mercator space* between the given
+  corners, not linearly in latitude — so a linear-in-latitude raster
+  systematically misplaces every row except the poles and the equator,
+  worse at higher latitudes (Web Mercator increasingly stretches out
+  latitude spacing near the poles relative to equirectangular). This
+  showed up as UV colour bleeding into the ocean west of Iberia/NW Africa
+  and coastlines not lining up for the UK/Scandinavia. Fixed by generating
+  each row's latitude via the inverse Web Mercator formula
+  (`mercatorPyToLat` in `mapRender.ts`: `n = pi - 2*pi*py/(h-1)`,
+  `lat = atan(sinh(n))` in degrees) instead of linear interpolation, with
+  the corresponding forward projection (`mercatorLatToPy`) used wherever a
+  lat/lon needs to be located within an already-computed frame (tests,
+  point sampling). CAMS's own internal grid and the land mask's own
+  internal raster remain ordinary equirectangular lookup tables — both are
+  only ever queried *by* lat/lon, never displayed directly by MapLibre, so
+  neither needed to change; only the *displayed* UV raster's row spacing
+  did. Verified via `src/lib/mercatorProjection.test.ts` (round-trip tests
+  at named cities and reference latitudes, including a test that an
+  equirectangular mapping would fail the same round-trip) and, more
+  importantly, a real-browser check: a solid-colour land/ocean debug
+  overlay rendered through the exact same MapLibre `image` source path was
+  confirmed to trace the actual basemap coastline for Iberia/NW Africa,
+  UK/Ireland/Norway/Sweden, Japan, and Australia before UV colour was
+  re-enabled.
 
 ## Frontend data flow
 

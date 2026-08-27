@@ -18,10 +18,36 @@ const TWILIGHT_DEG = 6;
 // lat=+/-90 produces +/-Infinity, which corrupts the whole image quad's
 // transform, not just the polar pixels (this was the root cause of a real
 // bug where the entire globe rendered as night — see
-// docs/MVP_ARCHITECTURE.md). Clamp to the same standard Web Mercator limit
-// used by web maps generally (and by this app's own basemap tiles, per
-// their own bounds metadata).
-export const MERCATOR_LAT_LIMIT = 85.05;
+// docs/MVP_ARCHITECTURE.md). This is the exact latitude where Web
+// Mercator's y-coordinate reaches +/-pi (the standard "square" Mercator
+// world map limit; the same value OSM/Google Maps/this app's own basemap
+// tiles use), derived rather than approximated so it's exactly consistent
+// with the projection math below.
+const RAD_TO_DEG = 180 / Math.PI;
+export const MERCATOR_LAT_LIMIT = RAD_TO_DEG * Math.atan(Math.sinh(Math.PI));
+
+/**
+ * Row index -> latitude for a raster that will be displayed by MapLibre as
+ * an `image` source. MapLibre stretches such a raster *linearly in Web
+ * Mercator space* between the given corner coordinates — NOT linearly in
+ * latitude. A raster generated with `lat = north + (south-north)*py/(h-1)`
+ * (equirectangular row spacing) therefore does not align with MapLibre's
+ * basemap: the mismatch is ~0 at the equator and grows with latitude,
+ * which is exactly the coastline misalignment (worse for Scandinavia than
+ * for equatorial Africa) that this function fixes. `py=0` -> north limit,
+ * `py=(height-1)/2` -> equator, `py=height-1` -> south limit.
+ */
+export function mercatorPyToLat(py: number, height: number): number {
+  const n = Math.PI - (2 * Math.PI * py) / (height - 1);
+  return RAD_TO_DEG * Math.atan(Math.sinh(n));
+}
+
+/** Inverse of mercatorPyToLat: latitude -> the row index it belongs at. */
+export function mercatorLatToPy(lat: number, height: number): number {
+  const latRad = lat / RAD_TO_DEG;
+  const n = Math.asinh(Math.tan(latRad));
+  return ((Math.PI - n) * (height - 1)) / (2 * Math.PI);
+}
 
 // Sanity thresholds, not scientific ones: CAMS itself already implies "the
 // sun must be up here" once its UV value is meaningfully above zero. If the
@@ -65,7 +91,6 @@ function bilinear(data: Float32Array, grid: ManifestGrid, lat: number, lon: numb
 /** Sun altitude in degrees at every cell of `grid`, for one timestamp. */
 function computeAltitudeGrid(grid: ManifestGrid, date: Date): Float32Array {
   const out = new Float32Array(grid.nlat * grid.nlon);
-  const RAD_TO_DEG = 180 / Math.PI;
   for (let row = 0; row < grid.nlat; row++) {
     const lat = grid.lat_start + row * grid.lat_step;
     for (let col = 0; col < grid.nlon; col++) {
@@ -138,7 +163,7 @@ export function computeUvFrame(
   let hadNightInconsistency = false;
 
   for (let py = 0; py < outH; py++) {
-    const lat = north + ((south - north) * py) / (outH - 1);
+    const lat = mercatorPyToLat(py, outH);
     for (let px = 0; px < outW; px++) {
       const lon = west + ((east - west) * px) / outW;
       const idx = (py * outW + px) * 4;
@@ -178,7 +203,7 @@ export function computeUvFrame(
 /** Samples the RGBA colour a computed frame would show at (lat, lon). */
 export function sampleFramePixel(frame: UvFrame, lat: number, lon: number): [number, number, number, number] {
   const { bounds, width, height, rgba } = frame;
-  const py = Math.round(((lat - bounds.north) / (bounds.south - bounds.north)) * (height - 1));
+  const py = Math.round(mercatorLatToPy(lat, height));
   const px = Math.round(((lon - bounds.west) / (bounds.east - bounds.west)) * width);
   const clampedPy = Math.min(Math.max(py, 0), height - 1);
   const clampedPx = Math.min(Math.max(px, 0), width - 1);
