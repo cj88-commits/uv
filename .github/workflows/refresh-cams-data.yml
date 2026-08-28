@@ -26,7 +26,11 @@ jobs:
       - name: Install eccodes system library (required by cfgrib)
         run: sudo apt-get update && sudo apt-get install -y libeccodes-dev
 
-      - run: pip install -r scripts/cams/requirements.txt
+      - run: pip install -r scripts/cams/requirements-dev.txt
+
+      - name: Test leadtime-tiering logic (no network/credentials needed)
+        working-directory: scripts/cams
+        run: pytest test_download_forecast.py
 
       - name: Download latest CAMS forecast (hourly to 36h, every 3h to 120h)
         working-directory: scripts/cams

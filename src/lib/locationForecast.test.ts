@@ -167,6 +167,75 @@ describe("buildLocationForecast: per-day category/protection derive from the sam
   });
 });
 
+// Mirrors scripts/cams/download_forecast.py's build_leadtime_hours: hourly
+// out to `hourlyUntil`, then every `step` hours out to `totalHours`. Used to
+// prove the full "generated CAMS output -> frontend loader -> selected-
+// location series -> 5-day component" chain with the SAME frame spacing the
+// real pipeline now produces (see scripts/cams/test_download_forecast.py
+// for the Python-side equivalent of this leadtime math).
+function buildTieredSeries(runStartIso: string, hourlyUntil: number, step: number, totalHours: number): PointSample[] {
+  const leadtimes: number[] = [];
+  for (let h = 0; h <= hourlyUntil; h++) leadtimes.push(h);
+  for (let h = hourlyUntil + step; h <= totalHours; h += step) leadtimes.push(h);
+
+  const start = new Date(runStartIso).getTime();
+  return leadtimes.map((h) => {
+    const t = new Date(start + h * 3600_000);
+    const hourOfDay = t.getUTCHours();
+    const distanceFromNoon = Math.abs(hourOfDay - 12);
+    const uv = Math.max(0, 8 - distanceFromNoon);
+    return { time: t.toISOString().replace(".000Z", "Z"), uv, uvClear: uv + 1 };
+  });
+}
+
+describe("buildLocationForecast: end-to-end with the real tiered CAMS leadtime shape", () => {
+  // hourly 0..36h, then every 3h to 120h (CAMS's own max horizon) -- the
+  // exact request scripts/cams/download_forecast.py now issues.
+  const RUN_START = "2026-08-27T12:00:00Z";
+  const series = buildTieredSeries(RUN_START, 36, 3, 120);
+
+  const CITIES: Record<string, number> = {
+    London: 0,
+    "New York": -74,
+    Tokyo: 139.7,
+    Sydney: 151.2,
+    Auckland: 174.8,
+    Honolulu: -157.86,
+  };
+
+  it("London: 5 full local days are available when 'today' is the run's own local day", () => {
+    const forecast = buildLocationForecast(series, CITIES.London, RUN_START);
+    expect(forecast.days.map((d) => d.dateKey)).toEqual([
+      "2026-08-27",
+      "2026-08-28",
+      "2026-08-29",
+      "2026-08-30",
+      "2026-08-31",
+    ]);
+  });
+
+  it("London: gracefully shows only 4 days when 'today' has already rolled to the day after the run (a fifth day exists but doesn't clear the coverage bar)", () => {
+    const forecast = buildLocationForecast(series, CITIES.London, "2026-08-28T09:00:00Z");
+    expect(forecast.days.map((d) => d.dateKey)).toEqual([
+      "2026-08-28",
+      "2026-08-29",
+      "2026-08-30",
+      "2026-08-31",
+    ]);
+  });
+
+  it.each(Object.entries(CITIES))("%s: the tiered horizon yields multiple real forecast days, not just today", (_name, lon) => {
+    const forecast = buildLocationForecast(series, lon, RUN_START);
+    expect(forecast.days.length).toBeGreaterThan(1);
+    // Chronological, unique, and never before "today".
+    const keys = forecast.days.map((d) => d.dateKey);
+    expect(keys).toEqual([...keys].sort());
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(forecast.today).not.toBeNull();
+    expect(keys[0]).toBe(forecast.today!.dateKey);
+  });
+});
+
 describe("trimToDaylightWindow", () => {
   function point(hour: number, uv: number): PointSample {
     return { time: new Date(Date.UTC(2026, 5, 1, hour)).toISOString(), uv, uvClear: uv };

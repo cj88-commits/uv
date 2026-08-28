@@ -281,13 +281,35 @@ Tokyo, Sydney, and Auckland (date-line-adjacent).
 
 **5-day forecast horizon.** `buildLocationForecast` walks local-day groups
 forward from "today" and stops at 5, but a day only appears in `days` if it
-has real coverage: `today` is always included (the primary card already
-answers for it regardless of how many hours are loaded), but any later day
-needs at least `MIN_SAMPLES_FOR_FUTURE_DAY` (6) hourly samples — otherwise
-the CAMS horizon's trailing edge (sometimes a single post-midnight hour)
-would render as a bogus "tomorrow: UV 0.0, peak 00:00" card. This is why the
-committed ~37h dataset in this repo shows only 1-2 days locally; the 5-day
-UI itself is unaffected once a longer-horizon refresh lands (see below).
+has real coverage (`hasMeaningfulDaylightCoverage` in `locationForecast.ts`):
+`today` is always included (the primary card already answers for it
+regardless of how many hours are loaded), but any later day needs at least
+`MIN_SAMPLES_FOR_FUTURE_DAY` (6) hourly samples *and* a nonzero peak —
+otherwise the CAMS horizon's trailing edge (sometimes a handful of
+post-midnight, all-night hours) would render as a bogus "tomorrow: UV 0.0,
+peak 00:00" card. This logic was verified end-to-end against the exact
+tiered-leadtime shape the pipeline now produces (see
+`locationForecast.test.ts`'s "end-to-end with the real tiered CAMS leadtime
+shape" suite): a run starting on its own local day yields 5 real days for
+London (and every other tested city); a run whose "today" has already
+rolled over to the day after the run's own UTC day yields 4 (the 5th day's
+tail doesn't clear the coverage bar) — both are correct, expected outcomes
+of the rule, not bugs.
+
+*Root cause of the "only Today" symptom (found investigating this issue):*
+this was **not** a grouping/parsing/rendering bug. `.github/workflows/
+refresh-cams-data.yml`'s scheduled trigger had simply never fired since the
+tiered-download code shipped — confirmed via the GitHub Actions API
+(`GET /repos/.../actions/workflows/refresh-cams-data.yml/runs` returned
+`total_count: 0`, while `deploy.yml` had run and succeeded on every push).
+The committed `public/data/*` was still the old single-run, ~37h dataset
+from before that change, which — correctly, per the rule above — only ever
+produces 1-2 local days. No code fix was needed for this part; the tiered
+download logic added previously was already correct, just never executed.
+GitHub scheduled workflows are documented to be delayed (sometimes
+significantly) around the top of the hour under platform load, which is
+exactly when a `cron: "0 */6 * * *"` schedule fires — worth keeping in mind
+if a future refresh looks similarly "stuck".
 
 **Hourly chart** (`HourlyUvChart.tsx`) is a hand-rolled responsive SVG —
 this project had no charting library, and one bell-curve-shaped line for a
@@ -297,41 +319,69 @@ UV > 0 (±1h padding) so the chart doesn't waste width on the flat overnight
 stretch; it never claims a separate sunrise/sunset — CAMS's own near-zero
 night values are the trim signal. The chart never recomputes peak/window
 itself; it's passed the same `DailyUvSummary` the primary card renders.
+Unchanged since it was already working well.
 
-**Cloud impact** (`getCloudImpact` in `uv.ts`) compares the same instant's
-total-sky (`uvbed`) and clear-sky (`uvbedcs`) UV — both fields this project
-already had — with thresholds tuned against exaggerated-percentage failure
-modes, not just "guard division by zero":
+**5-day strip layout.** `DailyForecastStrip.tsx` renders each day as a
+`.daily-card` with `flex: 1 1 58px; max-width: 120px` inside a
+`justify-content: flex-start` row — deliberately not CSS Grid's
+`repeat(N, 1fr)`, which would still stretch a single available day into one
+"giant" card filling the whole row (`1fr` always divides 100% of the
+container between however many columns exist, regardless of N). Capped
+flex-grow instead lets cards share the row when there's room without ever
+growing past `max-width`, so 1-2 real days render as compact, left-aligned
+cards with empty trailing space, and 5 real days on a typical phone width
+settle close to their natural ~60-70px each. Also removed the old repeated
+"Protection recommended" line under every card in favour of a single small
+dot (`.daily-card-protection-dot`) next to the UV number on days that cross
+the threshold — the category swatch colour already carries most of the
+signal.
 
-| Guard | Constant | Why |
+**Cloud impact** (`getCloudImpact` in `uv.ts`) was redesigned from a
+percentage-tier ladder into an action-oriented, mostly-hidden decision:
+consumers don't primarily care that "cloud is reducing UV by 45%" — they
+care whether their sun-protection decision could change if the sky clears.
+`CloudImpactKind` is `"none" | "adviceChange" | "limiting"`:
+
+| Case | Condition | Message |
 |---|---|---|
-| Below this clear-sky UV, no comparison is shown at all | `CLOUD_IMPACT_MIN_CLEAR_UV = 0.5` | Night/deep twilight: both values are ~0; nothing to compare, and this also avoids dividing by a near-zero number. |
-| Below this absolute difference, tier is "negligible" regardless of percent | `CLOUD_IMPACT_NEGLIGIBLE_ABS_DIFF = 0.3` | The two fields come from independent parts of the same model; a 0.1 gap (e.g. 5.9 vs 6.0) is rounding noise, not a real cloud effect. |
-| Below this clear-sky UV, emphasis is capped at "modest" even if the percentage is large | `CLOUD_IMPACT_MIN_CLEAR_FOR_STRONG_CLAIM = 2.0` | "Cloud cut UV by 70%" reads as alarming when clear-sky was only UV 1 (already "Low", no protection needed either way). |
-| Percent bands above both floors | <20% modest · 20-49% meaningful · ≥50% large | Ordinary tiering once the above guards rule out noise/low-stakes cases. |
+| `adviceChange` (shown prominently — the highest-value case) | `forecastUv < PROTECTION_THRESHOLD && clearUv >= PROTECTION_THRESHOLD` — **any** crossing, no minimum-gap floor | "If the clouds clear — UV could rise from X to Y — Sun protection may be needed if skies clear." |
+| `limiting` | `forecastUv >= PROTECTION_THRESHOLD && diff >= CLOUD_IMPACT_MATERIAL_ABS_DIFF (1.0)` | "Clouds are limiting UV — Forecast UV is X, but could reach around Y if skies clear." |
+| `none` | neither of the above, or `!isDay`, or `clearUv < CLOUD_IMPACT_MIN_CLEAR_UV (0.5)` | section renders nothing |
 
-`totalUv` is clamped to never exceed `clearUv` in the diff (independent
-rounding can occasionally put it fractionally above). See `uv.test.ts` for
-the full threshold matrix, including the two named test cases in the
-original spec (4 vs 6 → ~33% "meaningful"; 5.9 vs 6 → no exaggerated
-warning) and explicit divide-by-zero/night coverage.
+`isDay` is threaded in from the same real solar-altitude day/night check the
+primary card already uses (`daynight.ts`) rather than inferred from the UV
+values alone. `diff` is clamped to `>= 0` (independent rounding between the
+two fields can occasionally put `forecastUv` fractionally above `clearUv`).
+Percentage is still computed and returned (`percent`) for tests/debugging,
+but the UI never leads with it — see `CloudImpact.tsx`. Wording deliberately
+avoids "will rise" (→ "could rise .. if skies clear") and never calls
+`uvbed` "actual"/"live" UV (→ "Forecast UV"), since CAMS is model guidance,
+not a sensor reading. See `uv.test.ts` for the full case matrix, including
+the exact spec examples (2.3→4.2 advice-change; 4.1→6.3 limiting; 5.7→5.9
+and 5.9→6.0 hidden; the 2.9→3.1 threshold-crossing case; and explicit
+divide-by-zero/night coverage).
 
 **Extending the CAMS horizon for the 5-day forecast.**
-`scripts/cams/download_forecast.py` now fetches a *tiered* leadtime: hourly
-out to 36h (unchanged — this is what the map and the hourly chart need),
-then every 3h out to 120h (CAMS's own max horizon) for the 5-day forecast.
-This was a deliberate choice over a flat hourly fetch to 120h: the frontend
-still eagerly downloads every listed hourly file (see above), so a flat
+`scripts/cams/download_forecast.py` fetches a *tiered* leadtime: hourly out
+to 36h (unchanged — this is what the map and the hourly chart need), then
+every 3h out to 120h (CAMS's own max horizon) for the 5-day forecast. This
+was a deliberate choice over a flat hourly fetch to 120h: the frontend still
+eagerly downloads every listed hourly file (see above), so a flat
 120h-hourly fetch would ~3.3x that payload, while this tiering keeps it
 under ~1.8x. `process_forecast.py` needed no format changes — it already
 derives everything from the GRIB's own `valid_time`s, so it works
 identically whether the leadtimes it's given are contiguous or not.
-`.github/workflows/refresh-cams-data.yml` was updated to pass
+`.github/workflows/refresh-cams-data.yml` runs `pytest
+test_download_forecast.py` (pure leadtime-math tests, no network/credentials
+needed) before downloading, then passes
 `--hours 120 --hourly-until 36 --long-range-step 3`. This is a pipeline
 change, not a frontend one — the next scheduled refresh (every 6h, already
 configured with its existing secrets) will start producing enough days for
 a real 5-day forecast with no frontend redeploy required, which is the
 whole point of keeping forecast refreshes and frontend deploys decoupled.
+No Cloudflare R2, database, or second API was introduced — forecast data
+still flows CAMS → GitHub Actions → `public/data/*` committed to the repo →
+GitHub Pages → static frontend, exactly as before.
 
 ## Deployment
 

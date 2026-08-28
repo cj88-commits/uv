@@ -58,7 +58,7 @@ export function LocationPanel({
         </div>
         <HourlyUvChart points={chartPoints} summary={todaySummary} lon={lon} selectedTime={selectedTime} />
         <DailyForecastStrip days={days} />
-        <CloudImpact totalUv={uv} clearUv={uvClear} />
+        <CloudImpact forecastUv={uv} clearUv={uvClear} isDay={isDay} />
       </>
     );
   }
@@ -116,7 +116,7 @@ export function LocationPanel({
 
       <HourlyUvChart points={chartPoints} summary={todaySummary} lon={lon} selectedTime={selectedTime} />
       <DailyForecastStrip days={days} />
-      <CloudImpact totalUv={uv} clearUv={uvClear} />
+      <CloudImpact forecastUv={uv} clearUv={uvClear} isDay={isDay} />
     </>
   );
 }

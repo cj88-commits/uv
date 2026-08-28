@@ -102,77 +102,84 @@ export function getFirstHourAtOrAbove(hourly: HourlyUvPoint[], threshold: number
 //
 // CAMS gives us two UV fields for the same instant: uvbed (total-sky, i.e.
 // this forecast's expected UV given its own cloud/aerosol/ozone fields) and
-// uvbedcs (clear-sky, the same quantity as if the sky were cloud-free). The
-// gap between them is how much cloud is expected to be suppressing UV below
-// its clear-sky ceiling. This is presentation logic over two CAMS fields we
-// already have — no separate cloud-cover model or data source.
+// uvbedcs (clear-sky, the same quantity as if the sky were cloud-free). This
+// is presentation logic over those two CAMS fields we already have — no
+// separate cloud-cover model or data source.
 //
-// Thresholds below are deliberately conservative: a UV Index reading itself
-// only carries ~0.1 of real precision, and the two fields are produced by
-// independent parts of the same model, so small gaps are noise, not signal.
-export type CloudImpactTier = "none" | "negligible" | "modest" | "meaningful" | "large";
+// Deliberately action-oriented, not percentage-first: a consumer doesn't
+// primarily care that "cloud is reducing UV by 45%" -- they care whether
+// their sun-protection decision could change if the sky clears. So the
+// decision here is binary-ish (does the advice change, or is clear-sky
+// materially stronger than an already-recommended forecast?), not a tier
+// ladder. "none" means: don't show the section at all, because there's
+// nothing actionable to say.
+export type CloudImpactKind =
+  | "none"
+  /** forecast UV is below the protection threshold but clear-sky UV is at
+   * or above it -- the single highest-value case, since it's the one
+   * situation where "should I protect?" itself could flip. */
+  | "adviceChange"
+  /** protection is already recommended at the forecast UV, and clear-sky UV
+   * is materially higher still -- worth flagging, but not advice-changing. */
+  | "limiting";
 
-export interface CloudImpact {
-  tier: CloudImpactTier;
-  totalUv: number;
+export interface CloudImpactResult {
+  kind: CloudImpactKind;
+  forecastUv: number;
   clearUv: number;
-  /** clearUv - totalUv, clamped to >= 0 (model rounding can occasionally
-   * put totalUv fractionally above clearUv; that is never a real cloud
+  /** clearUv - forecastUv, clamped to >= 0 (model rounding can occasionally
+   * put forecastUv fractionally above clearUv; that is never a real cloud
    * effect in the other direction). */
-  absoluteDiff: number;
-  /** absoluteDiff as a percentage of clearUv, or null when clearUv is too
-   * low for a percentage to mean anything (see CLOUD_IMPACT_MIN_CLEAR_UV). */
+  diff: number;
+  /** diff as a percentage of clearUv, kept for tests/debugging only -- the
+   * UI deliberately does not lead with this (see module comment above). Null
+   * when clearUv is 0 (nothing to divide by). */
   percent: number | null;
 }
 
-/** Below this clear-sky UV, both total and clear are effectively "no UV"
- * (night, deep twilight) — there is nothing meaningful to compare, so no
- * cloud-impact figure is shown at all rather than dividing by a near-zero
- * number. */
+/** Below this clear-sky UV, both fields are effectively "no UV" (deep
+ * twilight) -- nothing meaningful to compare, and this also guards the
+ * percent calculation from a near-zero denominator. Night itself is gated
+ * separately by the caller passing `isDay` (see getCloudImpact) rather than
+ * inferred from this alone, per the existing real solar-altitude day/night
+ * logic in daynight.ts. */
 export const CLOUD_IMPACT_MIN_CLEAR_UV = 0.5;
 
-/** Below this clear-sky UV, the *category* is already "Low" regardless of
- * cloud, so even a large relative reduction isn't a meaningful claim (e.g.
- * "cloud cut UV by 70%" when clear-sky was only UV 1 reads as alarming for
- * a day that needed no protection either way). Below this floor, emphasis
- * is capped at "modest" no matter how large the percentage is. */
-export const CLOUD_IMPACT_MIN_CLEAR_FOR_STRONG_CLAIM = 2.0;
-
-/** Absolute differences smaller than this read as model/rounding noise
- * between the two independently-computed fields, not a real cloud effect —
- * e.g. total=5.9 vs clear=6.0 should never be presented as "cloud is
- * reducing UV". */
-export const CLOUD_IMPACT_NEGLIGIBLE_ABS_DIFF = 0.3;
-
-const CLOUD_IMPACT_MODEST_MAX_PERCENT = 20;
-const CLOUD_IMPACT_MEANINGFUL_MAX_PERCENT = 50;
+/** Once protection is already recommended at the forecast UV (case
+ * "limiting"), clear-sky UV needs to be at least this much higher before
+ * it's worth flagging as "materially stronger" -- e.g. 5.9 vs 6.0 (a 0.1
+ * gap between two independently-computed fields) is rounding noise, not a
+ * real cloud effect, and should never be presented as meaningful. 1.0 (a
+ * full UV Index step) was chosen as a round, easily-justified "this is
+ * clearly more than noise" bar -- roughly half the width of a UV category
+ * band. Note the "adviceChange" case has no such floor: ANY crossing of the
+ * protection threshold is inherently the highest-value case regardless of
+ * how numerically small the gap is (e.g. forecast 2.9 vs clear 3.1). */
+export const CLOUD_IMPACT_MATERIAL_ABS_DIFF = 1.0;
 
 /**
  * Compares forecast (total-sky) UV against clear-sky potential UV at the
- * same instant/location and classifies how much cloud is currently expected
- * to be reducing UV, with guards against divide-by-zero and exaggerated
- * percentages at low absolute UV (see the threshold constants above).
+ * same instant/location and decides whether there's an actionable "cloud
+ * impact" story worth showing, per the two cases above. `isDay` should come
+ * from the same real solar-altitude day/night check already used elsewhere
+ * (daynight.ts) -- night is never shown here, however the two UV values
+ * happen to compare.
  */
-export function getCloudImpact(totalUv: number, clearUv: number): CloudImpact {
-  if (clearUv < CLOUD_IMPACT_MIN_CLEAR_UV) {
-    return { tier: "none", totalUv, clearUv, absoluteDiff: 0, percent: null };
+export function getCloudImpact(forecastUv: number, clearUv: number, isDay: boolean): CloudImpactResult {
+  const diff = Math.max(0, clearUv - forecastUv);
+  const percent = clearUv > 0 ? (diff / clearUv) * 100 : null;
+
+  if (!isDay || clearUv < CLOUD_IMPACT_MIN_CLEAR_UV) {
+    return { kind: "none", forecastUv, clearUv, diff, percent: null };
   }
 
-  const absoluteDiff = Math.max(0, clearUv - totalUv);
-  const percent = (absoluteDiff / clearUv) * 100;
-
-  let tier: CloudImpactTier;
-  if (absoluteDiff < CLOUD_IMPACT_NEGLIGIBLE_ABS_DIFF) {
-    tier = "negligible";
-  } else if (clearUv < CLOUD_IMPACT_MIN_CLEAR_FOR_STRONG_CLAIM) {
-    tier = "modest";
-  } else if (percent < CLOUD_IMPACT_MODEST_MAX_PERCENT) {
-    tier = "modest";
-  } else if (percent < CLOUD_IMPACT_MEANINGFUL_MAX_PERCENT) {
-    tier = "meaningful";
-  } else {
-    tier = "large";
+  if (forecastUv < PROTECTION_THRESHOLD && clearUv >= PROTECTION_THRESHOLD) {
+    return { kind: "adviceChange", forecastUv, clearUv, diff, percent };
   }
 
-  return { tier, totalUv, clearUv, absoluteDiff, percent };
+  if (forecastUv >= PROTECTION_THRESHOLD && diff >= CLOUD_IMPACT_MATERIAL_ABS_DIFF) {
+    return { kind: "limiting", forecastUv, clearUv, diff, percent };
+  }
+
+  return { kind: "none", forecastUv, clearUv, diff, percent };
 }

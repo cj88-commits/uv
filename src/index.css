@@ -390,112 +390,136 @@ body,
   font-size: 10px;
 }
 
-/* --- 5-day forecast strip --------------------------------------------- */
-
+/* --- 5-day forecast strip -----------------------------------------------
+   flex-grow WITH a max-width cap, not grid's `repeat(N, 1fr)` -- 1fr tracks
+   always divide 100% of the container between however many columns exist,
+   so a grid would still stretch a single available day into one "giant"
+   card filling the whole row (the original bug). Capped flex-grow instead:
+   each card grows to share the row when there's room, but never past
+   max-width, so 1-2 real days render as compact, left-aligned cards with
+   empty trailing space rather than one stretched card, while 5 real days on
+   a typical phone width settle close to their natural ~60-70px each. If
+   5 genuinely don't fit (a very narrow phone), the row scrolls horizontally
+   as a fallback rather than truncating card content. */
 .daily-strip {
   display: flex;
-  gap: 0.5rem;
+  justify-content: flex-start;
+  gap: 0.4rem;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  scroll-snap-type: x proximity;
   padding-bottom: 0.15rem;
   margin: 0 -0.1rem;
 }
 
 .daily-card {
-  flex: 1 1 0;
-  min-width: 84px;
-  scroll-snap-align: start;
+  flex: 1 1 58px;
+  max-width: 120px;
   background: var(--panel-bg);
   border-radius: var(--radius);
-  padding: 0.6rem 0.5rem;
+  padding: 0.55rem 0.35rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.2rem;
   text-align: center;
 }
 
 .daily-card-label {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   color: var(--muted);
 }
 
+.daily-card-uv {
+  position: relative;
+  font-size: 1.1rem;
+  font-weight: 800;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.15rem;
+}
+
+/* Subtle threshold-crossing marker (spec: not a repeated "Protection
+   recommended" line under every card) -- a small dot riding the top-right
+   of the UV number, not competing with the category swatch below it. */
+.daily-card-protection-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warn);
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
 .daily-card-swatch {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
 }
 
-.daily-card-uv {
-  font-size: 1.15rem;
-  font-weight: 800;
-}
-
 .daily-card-category {
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   color: var(--muted);
 }
 
 .daily-card-peak-time {
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   color: var(--muted);
 }
 
-.daily-card-protection {
-  font-size: 0.65rem;
-  color: var(--ok);
-  line-height: 1.25;
-}
-
-.daily-card-protection.warn {
-  color: var(--warn);
-}
-
-/* --- Cloud impact -------------------------------------------------------
-   uv.ts's getCloudImpact tier "none" means the whole section renders
-   nothing (see CloudImpact.tsx) -- night/near-zero UV has nothing
-   meaningful to compare. */
+/* --- Cloud impact ---------------------------------------------------------
+   Action-oriented and conditional: getCloudImpact's kind "none" means the
+   whole section renders nothing (see CloudImpact.tsx) -- there is either
+   no useful cloud-vs-clear story to tell (negligible gap, night) or the
+   day's forecast already matches its clear-sky potential closely enough
+   that the distinction isn't worth surfacing. */
 
 .cloud-impact {
   background: var(--panel-bg);
   border-radius: var(--radius);
-  padding: 0.75rem 0.85rem;
+  padding: 0.85rem 0.9rem;
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 0.35rem;
+  border-left: 3px solid var(--muted);
 }
 
-.cloud-impact-row {
-  display: flex;
-  gap: 1.5rem;
-}
-
-.cloud-impact-stat-label {
-  font-size: 0.68rem;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.cloud-impact-stat-value {
-  font-size: 1.2rem;
+.cloud-impact-title {
+  margin: 0;
+  font-size: 0.72rem;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.cloud-impact-headline {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.35;
 }
 
 .cloud-impact-note {
   margin: 0;
   font-size: 0.82rem;
-  color: var(--text);
+  color: var(--muted);
   line-height: 1.4;
 }
 
-.cloud-impact-note.emphasis {
+/* The advice-changing case ("if the clouds clear, protection may be
+   needed") is the highest-value message SunCheck can show -- shown more
+   prominently than the "clouds are limiting an already-recommended
+   forecast" case, per spec. */
+.cloud-impact--prominent {
+  border-left-color: var(--warn);
+}
+
+.cloud-impact--prominent .cloud-impact-title {
   color: var(--warn);
-  font-weight: 600;
 }
 
 .app-footer-block {

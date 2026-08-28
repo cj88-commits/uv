@@ -152,6 +152,7 @@ describe("localDateKey / groupByLocalDate across timezones", () => {
   const TOKYO = 139.7; // offset +9
   const SYDNEY = 151.2; // offset +10
   const AUCKLAND = 174.8; // offset +12 (date-line-adjacent)
+  const HONOLULU = -157.86; // offset -11
 
   it("London: local date matches UTC date (offset 0)", () => {
     expect(localDateKey("2026-06-01T23:30:00Z", LONDON)).toBe("2026-06-01");
@@ -179,6 +180,12 @@ describe("localDateKey / groupByLocalDate across timezones", () => {
     // 2026-06-01T13:00Z is 2026-06-02T01:00 local at UTC+12.
     expect(localDateKey("2026-06-01T13:00:00Z", AUCKLAND)).toBe("2026-06-02");
     expect(localDateKey("2026-06-01T11:00:00Z", AUCKLAND)).toBe("2026-06-01");
+  });
+
+  it("Honolulu: local date stays on the PREVIOUS day for most of the UTC day (offset -11)", () => {
+    // 2026-06-02T08:00Z is 2026-06-01T21:00 local at UTC-11 -> still June 1st.
+    expect(localDateKey("2026-06-02T08:00:00Z", HONOLULU)).toBe("2026-06-01");
+    expect(localDateKey("2026-06-02T11:00:00Z", HONOLULU)).toBe("2026-06-02");
   });
 
   it("groupByLocalDate groups Tokyo frames into local days, not UTC days", () => {

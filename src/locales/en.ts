@@ -68,16 +68,18 @@ export const en = {
   dailyForecastTitle: "5-Day UV Forecast",
   today: "Today",
   dailyStripPeakAt: (time: string) => `Peak ${time}`,
-  dailyStripProtectionYes: "Protection recommended",
-  dailyStripProtectionNo: "Protection generally not required",
+  /** Accessible name for the small subtle marker shown on a day whose peak
+   * reaches the protection threshold -- not rendered as visible text (see
+   * DailyForecastStrip.tsx), so it doesn't repeat under every card. */
+  dailyStripProtectionIndicatorLabel: "Protection recommended this day",
 
-  cloudImpactTitle: "Cloud Impact",
-  cloudImpactForecastUv: "Forecast UV",
-  cloudImpactClearSkyUv: "Clear-sky potential",
-  cloudImpactModest: "Cloud is having a limited effect on UV.",
-  cloudImpactMeaningful: (percent: number) => `Cloud is reducing forecast UV by about ${percent}%.`,
-  cloudImpactLarge: (percent: number) =>
-    `Cloud is substantially reducing forecast UV (about ${percent}%). If skies clear, UV could rise significantly.`,
+  cloudImpactAdviceChangeTitle: "If the clouds clear",
+  cloudImpactAdviceChangeBody: (from: string, to: string) => `UV could rise from ${from} to ${to}.`,
+  cloudImpactAdviceChangeNote: "Sun protection may be needed if skies clear.",
+
+  cloudImpactLimitingTitle: "Clouds are limiting UV",
+  cloudImpactLimitingBody: (forecast: string, clear: string) =>
+    `Forecast UV is ${forecast}, but could reach around ${clear} if skies clear.`,
 };
 
 export type Locale = typeof en;

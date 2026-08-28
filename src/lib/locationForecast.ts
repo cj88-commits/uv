@@ -43,14 +43,16 @@ export interface LocationForecast {
   today: DayForecast | null;
   /** Local days from `today` onward, in chronological order, limited to
    * `maxDays`. Deliberately not padded out to a fixed length — a day only
-   * appears here if the loaded forecast actually has samples for it (see
-   * MVP_ARCHITECTURE.md on the CAMS horizon). Beyond `today` (always kept,
-   * however sparse -- it's the day the primary card is already answering
-   * for), a day needs at least MIN_SAMPLES_FOR_FUTURE_DAY samples to appear
-   * here at all: the CAMS horizon's last loaded day is often just its
-   * trailing edge (e.g. a single post-midnight hour), and reporting that
-   * one low/zero night-time sample as "Saturday's peak" would be exactly
-   * the kind of manufactured, misleading day this list must avoid. */
+   * appears here if the loaded forecast actually has meaningful coverage
+   * for it (see hasMeaningfulDaylightCoverage: MIN_SAMPLES_FOR_FUTURE_DAY
+   * samples AND a nonzero peak). `today` is always kept, however sparse —
+   * the primary card is already answering for it regardless. Beyond that,
+   * the CAMS horizon's last loaded day is often just its trailing edge
+   * (e.g. a single post-midnight hour), and reporting that one low/zero
+   * night-time sample as "Saturday's peak" would be exactly the kind of
+   * manufactured, misleading day this list must avoid — so if the loaded
+   * horizon covers 5 full local days, 5 appear here; if it only reaches
+   * partway into a 5th day, only 4 do (see MVP_ARCHITECTURE.md). */
   days: DayForecast[];
 }
 
@@ -58,7 +60,9 @@ export interface LocationForecast {
  * samples before it's considered a real daily summary rather than a bare
  * sliver of the CAMS horizon's trailing edge. 6 hours is a low bar (a
  * quarter of a day) chosen only to exclude near-empty tail days, not to
- * demand full coverage. */
+ * demand full coverage. Combined with requiring a nonzero peak (see
+ * hasMeaningfulDaylightCoverage below) so a day whose few loaded samples
+ * happen to all be night-time hours doesn't pass on count alone. */
 export const MIN_SAMPLES_FOR_FUTURE_DAY = 6;
 
 function toDayForecast(dateKey: string, samples: PointSample[], lon: number, referenceKey: string): DayForecast {
@@ -73,6 +77,16 @@ function toDayForecast(dateKey: string, samples: PointSample[], lon: number, ref
     protectionRecommended: advice?.recommended ?? false,
     peakLocalTime: summary.peak ? toApproxLocalTime(summary.peak.time, lon) : null,
   };
+}
+
+/** A future day counts as having a "meaningful daily peak" (see #6 in the
+ * spec: showing a real day, not a manufactured placeholder) only if it has
+ * enough samples AND at least one of them is actually above zero -- a
+ * handful of loaded samples that all happen to land at night would
+ * otherwise pass the sample-count check alone and render as a bogus
+ * "peak UV 0.0" day. */
+function hasMeaningfulDaylightCoverage(day: DayForecast): boolean {
+  return day.samples.length >= MIN_SAMPLES_FOR_FUTURE_DAY && (day.summary.peak?.uv ?? 0) > 0;
 }
 
 /**
@@ -102,7 +116,7 @@ export function buildLocationForecast(
     }
     const day = toDayForecast(group.dateKey, group.samples, lon, referenceKey);
     if (day.isToday) today = day;
-    if (!day.isToday && day.samples.length < MIN_SAMPLES_FOR_FUTURE_DAY) continue;
+    if (!day.isToday && !hasMeaningfulDaylightCoverage(day)) continue;
     days.push(day);
     if (days.length >= maxDays) break;
   }

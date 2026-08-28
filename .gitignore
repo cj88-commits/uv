@@ -8,6 +8,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.pytest_cache/
 
 # Raw CAMS downloads — large, regenerable, never committed
 scripts/cams/_raw/

@@ -115,59 +115,77 @@ describe("getDailyUvSummary", () => {
 });
 
 describe("getCloudImpact", () => {
-  it("computes the example from the spec: total=4, clear=6 -> ~33% reduction, meaningful", () => {
-    const result = getCloudImpact(4, 6);
-    expect(result.absoluteDiff).toBeCloseTo(2);
-    expect(result.percent).toBeCloseTo(33.33, 1);
-    expect(result.tier).toBe("meaningful");
+  describe("case A: advice-changing (forecast below threshold, clear-sky at/above it)", () => {
+    it("spec example: forecast=2.3, clear=4.2 -> shows the advice-change message", () => {
+      const result = getCloudImpact(2.3, 4.2, true);
+      expect(result.kind).toBe("adviceChange");
+      expect(result.diff).toBeCloseTo(1.9);
+    });
+
+    it("threshold crossing: forecast=2.9, clear=3.1 triggers even though the gap is small", () => {
+      // The advice-change case has no minimum-difference floor -- ANY
+      // crossing of the protection threshold is the highest-value case
+      // regardless of how numerically small the gap is.
+      const result = getCloudImpact(2.9, 3.1, true);
+      expect(result.kind).toBe("adviceChange");
+    });
+
+    it("does not trigger when forecast is already at the threshold (no advice change possible)", () => {
+      expect(getCloudImpact(3.0, 3.0, true).kind).toBe("none");
+    });
   });
 
-  it("does not produce an exaggerated warning for a near-identical pair (rounding noise)", () => {
-    const result = getCloudImpact(5.9, 6);
-    expect(result.absoluteDiff).toBeCloseTo(0.1);
-    expect(result.tier).toBe("negligible");
+  describe("case B: clouds limiting an already-recommended forecast", () => {
+    it("spec example: forecast=4.1, clear=6.3 -> shows the 'clouds are limiting UV' message", () => {
+      const result = getCloudImpact(4.1, 6.3, true);
+      expect(result.kind).toBe("limiting");
+      expect(result.diff).toBeCloseTo(2.2, 5);
+    });
+
+    it("does not trigger for a small gap even when protection is already recommended", () => {
+      // 5.9 vs 6.0: both fields are independently rounded/computed -- a 0.1
+      // gap is model noise, not a real cloud effect.
+      expect(getCloudImpact(5.9, 6.0, true).kind).toBe("none");
+    });
   });
 
-  it("never divides by zero when both values are zero (night)", () => {
-    const result = getCloudImpact(0, 0);
-    expect(result.tier).toBe("none");
-    expect(result.percent).toBeNull();
-    expect(result.absoluteDiff).toBe(0);
-    expect(Number.isFinite(result.absoluteDiff)).toBe(true);
+  describe("case C: negligible difference", () => {
+    it("spec example: forecast=5.7, clear=5.9 -> hides the section entirely", () => {
+      expect(getCloudImpact(5.7, 5.9, true).kind).toBe("none");
+    });
   });
 
-  it("treats any clear-sky value below the 'meaningful comparison' floor as tier none", () => {
-    // e.g. deep twilight: both values tiny, nothing useful to compare.
-    expect(getCloudImpact(0.1, 0.4).tier).toBe("none");
-    expect(getCloudImpact(0.2, 0.3).percent).toBeNull();
+  describe("night / zero", () => {
+    it("never divides by zero when both values are zero", () => {
+      const result = getCloudImpact(0, 0, false);
+      expect(result.kind).toBe("none");
+      expect(result.percent).toBeNull();
+      expect(Number.isFinite(result.diff)).toBe(true);
+    });
+
+    it("hides the section at night regardless of the numeric values", () => {
+      // Even if the two values would otherwise cross the threshold, isDay
+      // false (from the existing real solar-altitude day/night check) wins.
+      expect(getCloudImpact(1, 5, false).kind).toBe("none");
+    });
+
+    it("hides tiny dawn/dusk values even when isDay is true", () => {
+      expect(getCloudImpact(0.1, 0.4, true).kind).toBe("none");
+    });
   });
 
-  it("clamps a total-sky value that slightly exceeds clear-sky (independent rounding) to zero diff", () => {
-    const result = getCloudImpact(6.05, 6.0);
-    expect(result.absoluteDiff).toBe(0);
-    expect(result.percent).toBe(0);
-    expect(result.tier).toBe("negligible");
-  });
+  describe("other guards", () => {
+    it("clamps a forecast value that slightly exceeds clear-sky (independent rounding) to zero diff", () => {
+      const result = getCloudImpact(6.05, 6.0, true);
+      expect(result.diff).toBe(0);
+      expect(result.kind).toBe("none");
+    });
 
-  it("caps emphasis at 'modest' when clear-sky itself is low, even if the percentage is large", () => {
-    // clear=1.5 is still "Low" category territory (< 3) -- a large relative
-    // cut here shouldn't read as dramatically as the same percentage would
-    // at a high clear-sky value.
-    const result = getCloudImpact(0.3, 1.5);
-    expect(result.percent).toBeGreaterThan(50);
-    expect(result.tier).toBe("modest");
-  });
-
-  it("classifies a large, high-confidence reduction as 'large'", () => {
-    const result = getCloudImpact(1.0, 8.0);
-    expect(result.percent).toBeCloseTo(87.5, 1);
-    expect(result.tier).toBe("large");
-  });
-
-  it("classifies a small-but-real reduction as 'modest'", () => {
-    const result = getCloudImpact(5.5, 6.5);
-    expect(result.absoluteDiff).toBeCloseTo(1);
-    expect(result.percent).toBeCloseTo(15.38, 1);
-    expect(result.tier).toBe("modest");
+    it("does not trigger the 'limiting' case for both-low values with no threshold crossing", () => {
+      // forecast=1, clear=2.8: neither an advice-change (clear stays below
+      // the threshold) nor a material difference on an already-recommended
+      // day (forecast is below the threshold) -- nothing actionable to say.
+      expect(getCloudImpact(1, 2.8, true).kind).toBe("none");
+    });
   });
 });
