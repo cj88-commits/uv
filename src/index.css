@@ -150,6 +150,40 @@ body,
   display: inline-block;
 }
 
+/* MapLibre's own +/- zoom control (desktop only -- see the mobile rule
+   below, where pinch-to-zoom replaces it). Restyled to match the app's own
+   pill-shaped, dark buttons (.time-btn / .locate-btn) instead of
+   MapLibre's default white square control, which otherwise looks like a
+   stray widget from a different app. */
+.maplibregl-ctrl-top-right .maplibregl-ctrl-group {
+  background: var(--panel-bg);
+  border-radius: 999px;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.maplibregl-ctrl-top-right .maplibregl-ctrl-group button {
+  width: 32px;
+  height: 32px;
+  background-color: transparent;
+}
+
+.maplibregl-ctrl-top-right .maplibregl-ctrl-group button + button {
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.maplibregl-ctrl-top-right .maplibregl-ctrl-group button:not(:disabled):hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.maplibregl-ctrl-zoom-in .maplibregl-ctrl-icon,
+.maplibregl-ctrl-zoom-out .maplibregl-ctrl-icon {
+  /* MapLibre's default icon is a dark SVG baked in as a data-URI background
+     image, tuned for its light control -- invert so it reads on our dark
+     pill instead of restyling the app's own icon set for one control. */
+  filter: invert(1);
+}
+
 /* Sits along the top of the map -- the bottom of the map is owned by the
    bottom sheet on mobile, so map controls live up top instead (unlike a
    corner-anchored layout, this keeps them clear of the sheet at every
@@ -570,6 +604,14 @@ body,
      most of the screen. */
   .app-shell:has(.bottom-sheet--full) .legend,
   .app-shell:has(.bottom-sheet--full) .control-bar {
+    display: none;
+  }
+
+  /* Mobile zooms with a pinch gesture, not a +/- button -- the control
+     only exists (via NavigationControl in MapView.tsx) for desktop mouse
+     users, so drop the whole top-right container on mobile rather than
+     just visually hiding its contents. */
+  .maplibregl-ctrl-top-right {
     display: none;
   }
 }
