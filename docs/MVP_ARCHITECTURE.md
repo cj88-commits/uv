@@ -442,6 +442,43 @@ locally and commit the resulting `public/data/*` files yourself.
   click — only the map's visual overlay is land-clipped, per the project's
   explicit requirement not to lose ocean data, just its display.
 
+## Per-city SEO pages
+
+`spfyesorno.com/london`, `/tokyo`, etc. (up to 20 cities, `src/data/cities.json`)
+are real static HTML files, not client-side routes -- GitHub Pages is a
+plain static file server, so the common "SPA on GitHub Pages" 404.html
+redirect trick would serve a genuine HTTP 404 to the first request and
+nothing at all to crawlers/link-preview bots that don't execute JS, which
+defeats the actual goal.
+
+`scripts/seo/generate-city-pages.mjs` runs after `vite build` (see
+`package.json`'s `build` script) and, for each city, clones the already-built
+`dist/index.html` (correct hashed asset filenames included), swaps its
+title/description/canonical/OG tags for that city, injects
+`window.__PRESET_CITY__` (read once on mount by `App.tsx` via
+`lib/presetCity.ts` to seed `selectedLocation` -- the map opens already
+pinned there, no router needed), and injects a visually-hidden (`.sr-only`)
+fallback heading/paragraph as a sibling of `#root` for crawlers that never
+run JS. `main.tsx` removes that fallback element once the real app mounts,
+so a real browser never carries two `<h1>`s. The fallback text and the
+text the hydrated app actually shows (`en.cityHeading`/`en.cityIntro`) are
+kept identical on purpose -- serving different content to bots than to
+users is a real SEO risk (cloaking), even unintentionally. Also generates
+`dist/sitemap.xml` (homepage + every city's trailing-slash URL); `robots.txt`
+pointing at it lives in `public/` and is copied verbatim like `CNAME`.
+
+**This only works because of two related fixes made alongside it:**
+`vite.config.ts`'s `base` changed from `"./"` (relative) to `"/"` (root):
+a relative `./assets/...` resolves correctly from `/index.html` but
+resolves to the wrong place (`/london/assets/...`) from a page one
+directory deep. `loadManifest`/`loadHour`/`loadAllHours` (`forecast.ts`)
+and `loadLandMask` (`landMask.ts`) had the same bug with their own
+`baseUrl = "./data/"` defaults, now `"/data/"` -- every page, at any depth,
+fetches the one shared `public/data/*` copy from its real, single location.
+Both were safe to make absolute specifically because the site now has a
+fixed custom domain served from root (`public/CNAME`) -- no more GitHub
+Pages subpath ambiguity to stay compatible with.
+
 ## What would need to change for production
 
 - Self-host (or vendor) the basemap style instead of depending on

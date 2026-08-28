@@ -1,0 +1,22 @@
+[
+  { "slug": "london", "name": "London", "lat": 51.5074, "lon": -0.1278 },
+  { "slug": "new-york", "name": "New York", "lat": 40.7128, "lon": -74.006 },
+  { "slug": "los-angeles", "name": "Los Angeles", "lat": 34.0522, "lon": -118.2437 },
+  { "slug": "miami", "name": "Miami", "lat": 25.7617, "lon": -80.1918 },
+  { "slug": "honolulu", "name": "Honolulu", "lat": 21.3069, "lon": -157.8583 },
+  { "slug": "sydney", "name": "Sydney", "lat": -33.8688, "lon": 151.2093 },
+  { "slug": "auckland", "name": "Auckland", "lat": -36.8485, "lon": 174.7633 },
+  { "slug": "tokyo", "name": "Tokyo", "lat": 35.6762, "lon": 139.6503 },
+  { "slug": "singapore", "name": "Singapore", "lat": 1.3521, "lon": 103.8198 },
+  { "slug": "bangkok", "name": "Bangkok", "lat": 13.7563, "lon": 100.5018 },
+  { "slug": "dubai", "name": "Dubai", "lat": 25.2048, "lon": 55.2708 },
+  { "slug": "barcelona", "name": "Barcelona", "lat": 41.3874, "lon": 2.1686 },
+  { "slug": "rome", "name": "Rome", "lat": 41.9028, "lon": 12.4964 },
+  { "slug": "athens", "name": "Athens", "lat": 37.9838, "lon": 23.7275 },
+  { "slug": "nice", "name": "Nice", "lat": 43.7102, "lon": 7.262 },
+  { "slug": "cape-town", "name": "Cape Town", "lat": -33.9249, "lon": 18.4241 },
+  { "slug": "rio-de-janeiro", "name": "Rio de Janeiro", "lat": -22.9068, "lon": -43.1729 },
+  { "slug": "cancun", "name": "Cancún", "lat": 21.1619, "lon": -86.8515 },
+  { "slug": "bali", "name": "Bali", "lat": -8.6705, "lon": 115.2126 },
+  { "slug": "phuket", "name": "Phuket", "lat": 7.8804, "lon": 98.3923 }
+]

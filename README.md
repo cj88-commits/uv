@@ -25,8 +25,19 @@ reads directly. No backend, no database — see "Data architecture" below.
 npm install
 npm test        # Vitest — UV math, categories, protection window, parsing, land mask
 npm run dev     # http://localhost:5173
-npm run build   # type-check + production build to dist/
+npm run build   # type-check + production build to dist/, then generates the
+                # per-city SEO pages (dist/<slug>/index.html) + sitemap.xml
 ```
+
+`npm run build`'s last step, `scripts/seo/generate-city-pages.mjs`, turns the
+built homepage into ~20 real static pages (`spfyesorno.com/london`, etc., see
+`src/data/cities.json`) each pre-pinned to that city — see "Per-city SEO
+pages" in `docs/MVP_ARCHITECTURE.md` for why this needed real static files
+rather than client-side routing, and for the two path-handling fixes
+(absolute Vite `base`, absolute `/data/` fetch URLs) it depends on. `npm run
+dev` only serves the homepage — visiting `/london` there 404s; use `npm run
+preview` (serves the real `dist/` output, nested paths included) to check a
+city page locally.
 
 The UV heat-map is clipped to land only (oceans show the plain basemap) using
 a precomputed land/ocean mask committed at `public/data/land-mask.png`. It's

@@ -17,6 +17,7 @@ import { getDailyUvSummary } from "./lib/uv";
 import { buildLocationForecast } from "./lib/locationForecast";
 import { isDaylight } from "./lib/daynight";
 import { loadLandMask, type LandMask } from "./lib/landMask";
+import { getPresetCity } from "./lib/presetCity";
 
 const TIME_OFFSETS = [0, 1, 2, 3, 4, 5];
 
@@ -32,6 +33,12 @@ interface LatLon {
 }
 
 export default function App() {
+  // Set only on a per-city SEO page (see scripts/seo/generate-city-pages.mjs
+  // and lib/presetCity.ts); absent on the plain homepage. A stable window
+  // global set once before this component ever mounts, so a plain read
+  // (not state) is fine -- it cannot change during the app's lifetime.
+  const presetCity = getPresetCity();
+
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [hours, setHours] = useState<Map<string, HourlyGrid> | null>(null);
   const [landMask, setLandMask] = useState<LandMask | null>(null);
@@ -39,7 +46,9 @@ export default function App() {
   const [nowIso, setNowIso] = useState(() => new Date().toISOString());
 
   const [selectedOffset, setSelectedOffset] = useState(0);
-  const [selectedLocation, setSelectedLocation] = useState<LatLon | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<LatLon | null>(() =>
+    presetCity ? { lat: presetCity.lat, lon: presetCity.lon } : null
+  );
   const [userLocation, setUserLocation] = useState<LatLon | null>(null);
   const [geoStatus, setGeoStatus] = useState<"idle" | "locating" | "error">("idle");
   // Mobile bottom sheet -- irrelevant on desktop, which keeps the static
@@ -150,7 +159,9 @@ export default function App() {
         />
       )}
       <div className="app-footer-block">
-        <p className="intro-text">{en.introText}</p>
+        <p className="intro-text">
+          {presetCity ? en.cityIntro(presetCity.name) : en.introSupporting} {en.introHowItWorks}
+        </p>
         <p className="limitations">{en.limitationsNote}</p>
         {manifest && (
           <p className="attribution">
@@ -166,7 +177,7 @@ export default function App() {
       <header className="app-header">
         <div className="app-title-block">
           <div className="brand">{en.appName}</div>
-          <h1 className="tagline">{en.tagline}</h1>
+          <h1 className="tagline">{presetCity ? en.cityHeading(presetCity.name) : en.tagline}</h1>
         </div>
       </header>
 

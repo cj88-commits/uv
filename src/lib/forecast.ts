@@ -49,20 +49,26 @@ export function decode(values: number[]): Float32Array {
   return out;
 }
 
-export async function loadManifest(baseUrl = "./data/"): Promise<Manifest> {
+// Absolute (root-relative), not "./data/": the app now boots from pages at
+// different path depths (the homepage at "/" and per-city SEO pages at
+// "/<slug>/", see scripts/seo/generate-city-pages.mjs) that all share this
+// one copy of the data -- a page-relative path would resolve differently
+// (and wrongly, for anything but the homepage) depending on where the page
+// was served from. See vite.config.ts for the matching asset-path reasoning.
+export async function loadManifest(baseUrl = "/data/"): Promise<Manifest> {
   const res = await fetch(`${baseUrl}manifest.json`);
   if (!res.ok) throw new Error(`Failed to load manifest: ${res.status}`);
   return res.json();
 }
 
-export async function loadHour(hour: ManifestHour, baseUrl = "./data/"): Promise<HourlyGrid> {
+export async function loadHour(hour: ManifestHour, baseUrl = "/data/"): Promise<HourlyGrid> {
   const res = await fetch(`${baseUrl}${hour.file}`);
   if (!res.ok) throw new Error(`Failed to load ${hour.file}: ${res.status}`);
   const raw: RawHourlyFile = await res.json();
   return { time: raw.time, uv: decode(raw.uv), uvClear: decode(raw.uv_clear) };
 }
 
-export async function loadAllHours(manifest: Manifest, baseUrl = "./data/"): Promise<Map<string, HourlyGrid>> {
+export async function loadAllHours(manifest: Manifest, baseUrl = "/data/"): Promise<Map<string, HourlyGrid>> {
   const entries = await Promise.all(
     manifest.hours.map(async (h) => [h.time, await loadHour(h, baseUrl)] as const)
   );

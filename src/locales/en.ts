@@ -9,6 +9,15 @@ export const en = {
   // Rendered as the page's <h1> (see App.tsx) -- the search-intent question
   // this whole app answers, not just a decorative subtitle.
   tagline: "Do I need sunscreen today?",
+  // Per-city SEO pages (see scripts/seo/generate-city-pages.mjs) swap the
+  // homepage tagline/intro above for these instead, so the H1 and intro
+  // sentence a real visitor sees exactly match the copy the generator bakes
+  // into that page's initial HTML for crawlers -- no cloaking mismatch.
+  // Keep these two templates in sync with the ones duplicated in that
+  // script if either changes.
+  cityHeading: (city: string) => `UV Index in ${city} Today`,
+  cityIntro: (city: string) =>
+    `Check today's UV index and forecast for ${city} and find out when sun protection is recommended.`,
 
   categoryLabel: {
     low: "Low",
@@ -62,8 +71,11 @@ export const en = {
   limitationsNote:
     "Forecast guidance from CAMS satellite/model data (~40 km resolution), not a live sensor reading. Local cloud cover can change actual UV quickly.",
 
-  introText:
-    "Check the UV forecast for your location and see when sun protection is recommended. " +
+  // Split so the opening sentence can be swapped for cityIntro() on a
+  // per-city page while the "how it works" explanation stays the same
+  // everywhere -- see App.tsx.
+  introSupporting: "Check the UV forecast for your location and see when sun protection is recommended.",
+  introHowItWorks:
     "SPF? Yes or No uses forecast data from the Copernicus Atmosphere Monitoring Service " +
     "(CAMS) -- pick a spot on the map or share your location to see today's UV Index, " +
     "whether protection is recommended right now, and the approximate time of today's peak UV.",

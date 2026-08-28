@@ -48,8 +48,10 @@ export function sampleLandMask(mask: LandMask, lat: number, lon: number): boolea
   return mask.data[row * mask.width + col] === 1;
 }
 
-/** Browser-only loader: fetches the generated PNG and decodes it via canvas. */
-export async function loadLandMask(baseUrl = "./data/"): Promise<LandMask> {
+/** Browser-only loader: fetches the generated PNG and decodes it via canvas.
+ * Absolute base URL -- see the matching comment on loadManifest in
+ * forecast.ts (pages at different path depths share this one asset). */
+export async function loadLandMask(baseUrl = "/data/"): Promise<LandMask> {
   const res = await fetch(`${baseUrl}land-mask.png`);
   if (!res.ok) throw new Error(`Failed to load land mask: ${res.status}`);
   const blob = await res.blob();

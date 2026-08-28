@@ -1,12 +1,16 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
-// Relative base so the build works from any path -- both a GitHub Pages
-// project site served from a subpath (https://<user>.github.io/<repo>/)
-// and the custom domain (https://spfyesorno.com/, served from root) resolve
-// asset URLs correctly with no base-path change needed between the two.
+// Absolute root base. The site now has a fixed custom domain
+// (https://spfyesorno.com/, served from root -- see public/CNAME), and
+// per-city SEO pages (dist/<slug>/index.html, one directory deep) need
+// asset/data URLs that resolve correctly regardless of page depth. A
+// relative base ("./") would resolve "./assets/..." from /london/ as
+// /london/assets/..., which doesn't exist -- only /assets/... does, since
+// every page shares one built bundle. src/lib/forecast.ts's and
+// landMask.ts's data-fetch defaults were changed to match (see "/data/").
 export default defineConfig({
-  base: "./",
+  base: "/",
   plugins: [react()],
   test: {
     environment: "node",

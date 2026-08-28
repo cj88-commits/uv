@@ -726,3 +726,20 @@ body,
     transition: none;
   }
 }
+
+/* Per-city SEO pages' crawler-only fallback heading/paragraph (see
+   scripts/seo/generate-city-pages.mjs) -- present in the raw HTML for
+   anything that doesn't execute JS, but never visible to a sighted user
+   (main.tsx removes the element itself once the real app mounts; this
+   class exists to cover the brief window before that happens). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
