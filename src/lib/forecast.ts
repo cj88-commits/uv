@@ -158,3 +158,30 @@ export function nearestHourIndex(manifest: Manifest, nowIso: string): number {
   });
   return bestIdx;
 }
+
+export interface NowResolution {
+  index: number;
+  time: string;
+  /** nowIso minus the resolved frame's time, in ms. Positive means the
+   * resolved frame is in the past relative to the real instant `nowIso`
+   * (e.g. because the committed forecast data hasn't been refreshed
+   * recently enough to cover the current moment). */
+  staleMs: number;
+}
+
+/**
+ * Resolves what "Now" actually means against the loaded manifest, and how
+ * far that resolved frame is from the real current instant. `nearestHourIndex`
+ * always returns *some* index — with no data fresher than a day-old run,
+ * that can silently be many hours away from real "now", which previously
+ * showed as (for example) a genuinely-nighttime frame being presented as
+ * "Now" for a location that is actually in daylight. Callers should treat
+ * a large `staleMs` as "this isn't really live data" rather than trusting
+ * the resolved frame's day/night/UV state as current.
+ */
+export function resolveNow(manifest: Manifest, nowIso: string): NowResolution {
+  const index = nearestHourIndex(manifest, nowIso);
+  const time = manifest.hours[index].time;
+  const staleMs = new Date(nowIso).getTime() - new Date(time).getTime();
+  return { index, time, staleMs };
+}

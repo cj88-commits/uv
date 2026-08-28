@@ -6,6 +6,7 @@ import {
   seriesAtLocation,
   filterToday,
   nearestHourIndex,
+  resolveNow,
   approxUtcOffsetHours,
   type Manifest,
   type HourlyGrid,
@@ -91,6 +92,27 @@ describe("nearestHourIndex", () => {
     const manifest = makeManifest(times);
     expect(nearestHourIndex(manifest, "2026-06-01T07:20:00Z")).toBe(1);
     expect(nearestHourIndex(manifest, "2026-06-01T07:45:00Z")).toBe(2);
+  });
+});
+
+describe("resolveNow (regression: stale data silently presented as \"Now\")", () => {
+  it("reports near-zero staleness when the nearest hour is genuinely close to now", () => {
+    const times = ["2026-06-01T06:00:00Z", "2026-06-01T07:00:00Z", "2026-06-01T08:00:00Z"];
+    const manifest = makeManifest(times);
+    const res = resolveNow(manifest, "2026-06-01T07:05:00Z");
+    expect(res.index).toBe(1);
+    expect(res.time).toBe("2026-06-01T07:00:00Z");
+    expect(Math.abs(res.staleMs)).toBeLessThan(10 * 60 * 1000);
+  });
+
+  it("reports large positive staleness when the data doesn't reach the real current instant", () => {
+    // Mirrors the actual reported bug: committed data's last hour is
+    // hours behind the real "now" the app is running at.
+    const times = ["2026-08-26T12:00:00Z", "2026-08-28T00:00:00Z"];
+    const manifest = makeManifest(times);
+    const res = resolveNow(manifest, "2026-08-28T08:43:00Z");
+    expect(res.time).toBe("2026-08-28T00:00:00Z");
+    expect(res.staleMs).toBeGreaterThan(8 * 3600 * 1000); // > 8h stale
   });
 });
 

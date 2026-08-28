@@ -35,6 +35,8 @@ export const en = {
 
   loadingForecast: "Loading forecast…",
   loadError: "Couldn't load forecast data.",
+  staleDataWarning: (utcTime: string) =>
+    `Forecast data hasn't been refreshed recently — showing the closest available forecast (${utcTime} UTC), not the live current hour.`,
 
   night: "Night",
   nightBody: "The sun is below the horizon here right now.",

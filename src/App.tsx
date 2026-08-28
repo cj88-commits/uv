@@ -7,7 +7,7 @@ import { en } from "./locales/en";
 import {
   loadManifest,
   loadAllHours,
-  nearestHourIndex,
+  resolveNow,
   seriesAtLocation,
   filterToday,
   type Manifest,
@@ -18,6 +18,12 @@ import { isDaylight } from "./lib/daynight";
 import { loadLandMask, type LandMask } from "./lib/landMask";
 
 const TIME_OFFSETS = [0, 1, 2, 3, 4, 5];
+
+// If the closest available forecast hour is farther than this from the
+// real current instant, the committed data is too stale to represent
+// "Now" honestly (hourly data means a healthy refresh should always land
+// well under this). See docs/MVP_ARCHITECTURE.md.
+const STALE_THRESHOLD_MS = 90 * 60 * 1000;
 
 interface LatLon {
   lat: number;
@@ -62,7 +68,9 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
-  const nowIndex = useMemo(() => (manifest ? nearestHourIndex(manifest, nowIso) : 0), [manifest, nowIso]);
+  const nowResolution = useMemo(() => (manifest ? resolveNow(manifest, nowIso) : null), [manifest, nowIso]);
+  const nowIndex = nowResolution?.index ?? 0;
+  const isDataStale = (nowResolution?.staleMs ?? 0) > STALE_THRESHOLD_MS;
 
   const availableOffsets = useMemo(() => {
     if (!manifest) return [];
@@ -116,6 +124,11 @@ export default function App() {
       <main className="map-wrap">
         {error && <div className="banner error">{en.loadError}</div>}
         {loading && !error && <div className="banner">{en.loadingForecast}</div>}
+        {!loading && !error && isDataStale && nowResolution && (
+          <div className="banner error small">
+            {en.staleDataWarning(nowResolution.time.slice(11, 16))}
+          </div>
+        )}
 
         <MapView
           grid={manifest?.grid ?? null}

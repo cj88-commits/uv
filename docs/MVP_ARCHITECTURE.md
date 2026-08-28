@@ -228,8 +228,23 @@ not a per-country political map with a data overlay bolted on.
    file (typically ~25 files, a few hundred KB gzipped in total — see
    "Actual data sizes" in the final report). Once loaded, everything else
    is synchronous, in-memory math; there is no per-click network request.
-2. "Now" is resolved to the closest available hour in the manifest;
-   "+1h..+5h" are relative to that index, not to the run's start time.
+2. "Now" is resolved to the closest available hour in the manifest
+   (`resolveNow` in `forecast.ts`); "+1h..+5h" are relative to that index,
+   not to the run's start time. `resolveNow` also reports how far that
+   resolved frame is from the real current instant (`staleMs`) — if the
+   committed data hasn't been refreshed recently enough for "closest
+   available" to still mean "now" (more than 90 minutes off), the app
+   shows a banner rather than silently presenting a stale frame's
+   day/night/UV state as current. This is what caused a real bug: with
+   data whose last hour was ~9h in the past, "Now" silently resolved to a
+   genuinely-nighttime frame for a location that was actually in daylight
+   at the real current time — the day/night calculation itself
+   (`src/lib/daynight.ts`, real solar altitude via SunCalc from lat/lon/UTC
+   instant, never local/browser time) was always correct *for the
+   timestamp it was given*; the bug was that the timestamp it was given
+   wasn't actually "now". See `src/lib/daynight.test.ts` for the
+   regression tests (multiple cities, same-instant/different-longitude,
+   near the date line, and explicit browser-timezone independence).
 3. Clicking the map or using geolocation sets a `{lat, lon}`; the app then
    samples the nearest grid cell across every loaded hour
    (`seriesAtLocation`), filters that series to an **approximate** local
