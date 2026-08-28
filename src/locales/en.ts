@@ -15,10 +15,20 @@ export const en = {
 
   protectionYes: "Sun protection recommended",
   protectionNo: "Low UV",
+  /** UV is currently below the threshold but could still cross it later
+   * today (before the day's first period, or again after an earlier one
+   * already ended) -- "right now" implies today isn't necessarily done. */
   protectionNoBody: "Sun protection is generally not required right now.",
-  protectionUntil: (time: string) => `Protection recommended until ${time}`,
+  /** UV never reaches the threshold at all today -- "today" rather than
+   * "right now", since there's nothing left to wait for. */
+  protectionNoBodyToday: "Sun protection is generally not required today.",
   protectionWindow: (start: string, end: string) => `Protection recommended ${start}–${end}`,
-  willReachThreshold: (threshold: number, time: string) => `UV is forecast to reach ${threshold} at around ${time}.`,
+  /** Before today's (first) protection period has started. */
+  protectionUpcoming: (time: string) => `Protection is expected to be recommended from around ${time}.`,
+  /** After an earlier period today already ended, but a later one is still
+   * forecast -- "again" distinguishes this from protectionUpcoming, which
+   * would read oddly ("expected to be recommended") for a second period. */
+  protectionUpcomingAgain: (time: string) => `Protection may be recommended again from around ${time}.`,
 
   currentUv: "UV",
   peakToday: "Peak today",

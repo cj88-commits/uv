@@ -98,6 +98,88 @@ export function getFirstHourAtOrAbove(hourly: HourlyUvPoint[], threshold: number
   return null;
 }
 
+// --- Time-aware protection copy ---------------------------------------------
+//
+// getDailyUvSummary's protectionWindow (first threshold-crossing to last,
+// see above) answers "when today, overall, is UV >= threshold" -- useful
+// for the hourly chart's shaded band, but NOT safe to read straight into
+// prose: it says nothing about whether "now" is before, inside, or after
+// that span, and it silently bridges multiple separate above-threshold
+// stretches (e.g. a midday cloud dip) into one span. Reading it naively
+// produced a real bug: at 15:24 with the day's only crossing at 10:00 (long
+// past), the primary card said "UV is forecast to reach 3 at around 10:00"
+// -- a future-tense sentence about an event already over. The functions
+// below are explicitly relative to a `nowIso` instant (compared as absolute
+// timestamps, never formatted strings) so the primary card's prose can
+// never disagree with the clock.
+
+export interface ProtectionPeriod {
+  start: string;
+  end: string;
+}
+
+/**
+ * Contiguous stretches of a day where UV >= PROTECTION_THRESHOLD. Unlike
+ * DailyUvSummary.protectionWindow (first crossing to last), this correctly
+ * represents multiple separate periods -- e.g. crosses 3, dips below for a
+ * cloudy spell, rises above 3 again later -- as two periods rather than one
+ * bridged span.
+ */
+export function getProtectionPeriods(hourly: HourlyUvPoint[]): ProtectionPeriod[] {
+  const periods: ProtectionPeriod[] = [];
+  let start: string | null = null;
+  let last: string | null = null;
+  for (const point of hourly) {
+    if (point.uv >= PROTECTION_THRESHOLD) {
+      if (start === null) start = point.time;
+      last = point.time;
+    } else if (start !== null && last !== null) {
+      periods.push({ start, end: last });
+      start = null;
+      last = null;
+    }
+  }
+  if (start !== null && last !== null) periods.push({ start, end: last });
+  return periods;
+}
+
+export type PrimaryCardTiming =
+  /** `nowIso` falls within one of today's protection periods. */
+  | { kind: "recommended"; period: ProtectionPeriod }
+  /** `nowIso` is before a real future period. `isFirstPeriodOfDay` is false
+   * when an earlier period already ran its course today (see Case 5:
+   * "may be recommended AGAIN" reads oddly for a day's very first period). */
+  | { kind: "upcoming"; nextStart: string; isFirstPeriodOfDay: boolean }
+  /** Today had at least one protection period, but `nowIso` is after all of
+   * them and none remain. */
+  | { kind: "ended" }
+  /** UV never reaches the threshold at all today. */
+  | { kind: "none" };
+
+/**
+ * Determines how today's protection recommendation should be phrased
+ * relative to `nowIso` -- the one place this decision is made, so the
+ * primary card's prose, the hourly chart, and the daily summary can never
+ * disagree. Compares absolute timestamps throughout; never string-compares
+ * formatted times and never reads the browser's own clock/timezone.
+ * `nowIso` should be the exact selected-hour instant already threaded
+ * through the rest of the app (App.tsx's `selectedHourEntry.time`).
+ */
+export function getPrimaryCardTiming(hourly: HourlyUvPoint[], nowIso: string): PrimaryCardTiming {
+  const periods = getProtectionPeriods(hourly);
+  if (periods.length === 0) return { kind: "none" };
+
+  const now = new Date(nowIso).getTime();
+
+  const current = periods.find((p) => new Date(p.start).getTime() <= now && now <= new Date(p.end).getTime());
+  if (current) return { kind: "recommended", period: current };
+
+  const next = periods.find((p) => new Date(p.start).getTime() > now);
+  if (next) return { kind: "upcoming", nextStart: next.start, isFirstPeriodOfDay: next === periods[0] };
+
+  return { kind: "ended" };
+}
+
 // --- Total-sky vs clear-sky ("cloud impact") -------------------------------
 //
 // CAMS gives us two UV fields for the same instant: uvbed (total-sky, i.e.

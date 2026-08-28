@@ -1,5 +1,5 @@
 import { en } from "../locales/en";
-import { getProtectionAdvice, getFirstHourAtOrAbove, PROTECTION_THRESHOLD, type DailyUvSummary } from "../lib/uv";
+import { getProtectionAdvice, getPrimaryCardTiming, type DailyUvSummary, type PrimaryCardTiming } from "../lib/uv";
 import { toApproxLocalTime, type PointSample } from "../lib/forecast";
 import { trimToDaylightWindow, type DayForecast } from "../lib/locationForecast";
 import { HourlyUvChart } from "./HourlyUvChart";
@@ -12,18 +12,31 @@ interface Props {
   isDay: boolean;
   uv: number;
   uvClear: number;
-  /** The currently selected hour's ISO timestamp, so the hourly chart can
-   * highlight it if it falls within today's daylight window. */
+  /** The currently selected hour's ISO timestamp -- both the "now" instant
+   * all timing/copy decisions below are relative to, and what the hourly
+   * chart highlights if it falls within today's daylight window. */
   selectedTime: string | null;
   /** Today's peak/protection-window summary -- the exact same object the
    * hourly chart renders from, so the two can never disagree. */
   todaySummary: DailyUvSummary;
-  /** Today's full local-day sample series (unfiltered), used for the
-   * "reaches UV 3 at around..." lookups and as the hourly chart's source. */
+  /** Today's full local-day sample series (unfiltered), used to work out
+   * where `selectedTime` sits relative to today's protection period(s) and
+   * as the hourly chart's source. */
   todaySamples: PointSample[];
   /** Local days from today onward (however many the loaded forecast
    * actually covers, up to 5) -- see buildLocationForecast. */
   days: DayForecast[];
+}
+
+/** The one place that turns a PrimaryCardTiming into prose, so the day and
+ * night branches below can't phrase the same state differently. Returns
+ * null for "recommended" (handled separately, alongside the window text)
+ * and "ended" (concise by design -- see uv.ts's module comment: a past
+ * crossing has nothing useful left to say once it's over). */
+function upcomingNote(timing: PrimaryCardTiming, lon: number): string | null {
+  if (timing.kind !== "upcoming") return null;
+  const time = toApproxLocalTime(timing.nextStart, lon);
+  return timing.isFirstPeriodOfDay ? en.protectionUpcoming(time) : en.protectionUpcomingAgain(time);
 }
 
 export function LocationPanel({
@@ -38,9 +51,10 @@ export function LocationPanel({
   days,
 }: Props) {
   const chartPoints = trimToDaylightWindow(todaySamples).map((s) => ({ time: s.time, uv: s.uv }));
+  const timing: PrimaryCardTiming = selectedTime ? getPrimaryCardTiming(todaySamples, selectedTime) : { kind: "none" };
 
   if (!isDay) {
-    const nextAboveThreshold = getFirstHourAtOrAbove(todaySamples, PROTECTION_THRESHOLD);
+    const note = upcomingNote(timing, lon);
     return (
       <>
         <div className="location-panel night">
@@ -49,11 +63,7 @@ export function LocationPanel({
           <div className="uv-value">
             {en.currentUv} {uv.toFixed(1)}
           </div>
-          {nextAboveThreshold && (
-            <p className="body-text">
-              {en.willReachThreshold(PROTECTION_THRESHOLD, toApproxLocalTime(nextAboveThreshold.time, lon))}
-            </p>
-          )}
+          {note && <p className="body-text">{note}</p>}
           <Coords lat={lat} lon={lon} />
         </div>
         <HourlyUvChart points={chartPoints} summary={todaySummary} lon={lon} selectedTime={selectedTime} />
@@ -65,6 +75,7 @@ export function LocationPanel({
 
   const advice = getProtectionAdvice(uv);
   const category = en.categoryLabel[advice.category];
+  const note = upcomingNote(timing, lon);
 
   return (
     <>
@@ -78,25 +89,17 @@ export function LocationPanel({
           <span className="uv-category">{category}</span>
         </div>
 
-        {!advice.recommended && <p className="body-text">{en.protectionNoBody}</p>}
+        {!advice.recommended && (
+          <p className="body-text">{timing.kind === "none" ? en.protectionNoBodyToday : en.protectionNoBody}</p>
+        )}
 
-        {advice.recommended && todaySummary.protectionWindow && (
+        {advice.recommended && timing.kind === "recommended" && (
           <p className="body-text protection-window">
-            {en.protectionWindow(
-              toApproxLocalTime(todaySummary.protectionWindow.start, lon),
-              toApproxLocalTime(todaySummary.protectionWindow.end, lon)
-            )}
+            {en.protectionWindow(toApproxLocalTime(timing.period.start, lon), toApproxLocalTime(timing.period.end, lon))}
           </p>
         )}
 
-        {!advice.recommended && (() => {
-          const next = getFirstHourAtOrAbove(todaySamples, PROTECTION_THRESHOLD);
-          return next ? (
-            <p className="body-text">
-              {en.willReachThreshold(PROTECTION_THRESHOLD, toApproxLocalTime(next.time, lon))}
-            </p>
-          ) : null;
-        })()}
+        {!advice.recommended && note && <p className="body-text">{note}</p>}
 
         {todaySummary.peak && (
           <div className="peak-block">
