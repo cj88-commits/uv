@@ -55,6 +55,12 @@ export const en = {
     "approximate time of today's peak UV.",
 
   protectionSectionTitle: "Recommended sun protection",
+
+  sheetExpand: "Expand forecast details",
+  sheetCollapse: "Collapse forecast details",
+  sheetDragHandleLabel: "Drag to resize",
+  sheetSwipeUp: "Swipe up for details",
+  sheetShowMap: "Show map",
 };
 
 export type Locale = typeof en;

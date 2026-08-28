@@ -3,6 +3,7 @@ import { MapView } from "./components/MapView";
 import { TimeControl } from "./components/TimeControl";
 import { LocationPanel } from "./components/LocationPanel";
 import { Legend } from "./components/Legend";
+import { BottomSheet, type SheetState } from "./components/BottomSheet";
 import { en } from "./locales/en";
 import {
   loadManifest,
@@ -41,6 +42,11 @@ export default function App() {
   const [selectedLocation, setSelectedLocation] = useState<LatLon | null>(null);
   const [userLocation, setUserLocation] = useState<LatLon | null>(null);
   const [geoStatus, setGeoStatus] = useState<"idle" | "locating" | "error">("idle");
+  // Mobile bottom sheet -- irrelevant on desktop, which keeps the static
+  // side panel regardless of this value (see BottomSheet.tsx / the 860px
+  // breakpoint in index.css). Starts half-open so a first-time mobile
+  // visitor sees the answer panel without having to discover it exists.
+  const [sheetState, setSheetState] = useState<SheetState>("half");
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +88,10 @@ export default function App() {
 
   function handleSelectLocation(lat: number, lon: number) {
     setSelectedLocation({ lat, lon });
+    // A freshly chosen location is exactly what the sheet exists to show --
+    // if the user had collapsed it (e.g. to look at the map), bring it back
+    // to at least half-open rather than leaving the new result hidden.
+    setSheetState((s) => (s === "closed" ? "half" : s));
   }
 
   function handleUseMyLocation() {
@@ -95,6 +105,7 @@ export default function App() {
         const loc = { lat: pos.coords.latitude, lon: pos.coords.longitude };
         setUserLocation(loc);
         setSelectedLocation(loc);
+        setSheetState((s) => (s === "closed" ? "half" : s));
         setGeoStatus("idle");
       },
       () => setGeoStatus("error"),
@@ -114,14 +125,42 @@ export default function App() {
 
   const loading = !manifest || !hours || !landMask;
 
+  const panelContent = (
+    <div className="panel-content">
+      {!selectedLocation && <p className="click-prompt">{en.clickPrompt}</p>}
+      {selectedLocation && locationData && (
+        <LocationPanel
+          lat={selectedLocation.lat}
+          lon={selectedLocation.lon}
+          isDay={locationData.isDay}
+          uv={locationData.current?.uv ?? 0}
+          uvClear={locationData.current?.uvClear ?? 0}
+          dailySummary={locationData.summary}
+          todaySeriesForThreshold={locationData.today.map((s) => ({ time: s.time, uv: s.uv }))}
+        />
+      )}
+      <div className="app-footer-block">
+        <p className="intro-text">{en.introText}</p>
+        <p className="limitations">{en.limitationsNote}</p>
+        {manifest && (
+          <p className="attribution">
+            {en.attributionPrefix} {manifest.attribution}. {manifest.licence}.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+
   return (
-    <div className="app">
+    <div className="app-shell">
       <header className="app-header">
-        <div className="brand">{en.appName}</div>
-        <div className="tagline">{en.tagline}</div>
+        <div className="app-title-block">
+          <div className="brand">{en.appName}</div>
+          <div className="tagline">{en.tagline}</div>
+        </div>
       </header>
 
-      <main className="map-wrap">
+      <main className="map-area">
         {error && <div className="banner error">{en.loadError}</div>}
         {loading && !error && <div className="banner">{en.loadingForecast}</div>}
         {!loading && !error && isDataStale && nowResolution && (
@@ -129,6 +168,7 @@ export default function App() {
             {en.staleDataWarning(nowResolution.time.slice(11, 16))}
           </div>
         )}
+        {geoStatus === "error" && <div className="banner error small">{en.locationError}</div>}
 
         <MapView
           grid={manifest?.grid ?? null}
@@ -140,41 +180,19 @@ export default function App() {
           selectedLocation={selectedLocation}
         />
 
-        <Legend />
-
-        <div className="controls">
+        <div className="control-bar">
           <TimeControl offsets={availableOffsets} selectedOffset={selectedOffset} onSelect={setSelectedOffset} />
           <button className="locate-btn" onClick={handleUseMyLocation} disabled={geoStatus === "locating"}>
             {geoStatus === "locating" ? en.locatingYou : en.useMyLocation}
           </button>
         </div>
-        {geoStatus === "error" && <div className="banner error small">{en.locationError}</div>}
 
-        <section className="panel-wrap">
-          {!selectedLocation && <p className="click-prompt">{en.clickPrompt}</p>}
-          {selectedLocation && locationData && (
-            <LocationPanel
-              lat={selectedLocation.lat}
-              lon={selectedLocation.lon}
-              isDay={locationData.isDay}
-              uv={locationData.current?.uv ?? 0}
-              uvClear={locationData.current?.uvClear ?? 0}
-              dailySummary={locationData.summary}
-              todaySeriesForThreshold={locationData.today.map((s) => ({ time: s.time, uv: s.uv }))}
-            />
-          )}
-        </section>
+        <Legend />
       </main>
 
-      <footer className="app-footer">
-        <p className="intro-text">{en.introText}</p>
-        <p className="limitations">{en.limitationsNote}</p>
-        {manifest && (
-          <p className="attribution">
-            {en.attributionPrefix} {manifest.attribution}. {manifest.licence}.
-          </p>
-        )}
-      </footer>
+      <BottomSheet state={sheetState} onStateChange={setSheetState}>
+        {panelContent}
+      </BottomSheet>
     </div>
   );
 }
