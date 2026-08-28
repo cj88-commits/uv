@@ -1,6 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
-import type { ImageSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { ManifestGrid } from "../lib/forecast";
 import { renderUvFrame, type RenderBounds } from "../lib/mapRender";
@@ -23,6 +22,62 @@ interface Props {
 
 const SOURCE_ID = "uv-field";
 const LAYER_ID = "uv-field-layer";
+// Insert the UV raster just below this base-style layer so borders/labels
+// (added later in the style) stay visible on top of the raster, and above
+// the neutral land/ocean fills (added earlier) so the raster reads as the
+// map's dominant layer. Re-checked live every time it's used (see
+// syncUvLayer) rather than trusted from an earlier snapshot -- MapLibre
+// throws if `addLayer`'s `beforeId` doesn't currently exist.
+const BEFORE_LAYER_CANDIDATE = "countries-boundary";
+
+type Coordinates = [[number, number], [number, number], [number, number], [number, number]];
+
+export interface UvFrameParams {
+  sourceId: string;
+  layerId: string;
+  dataUrl: string;
+  coordinates: Coordinates;
+  beforeLayerCandidate?: string;
+}
+
+/** The minimal surface of maplibregl.Map that syncUvLayer needs -- narrow
+ * and structural so it's mockable in tests without a real Map/WebGL
+ * context (see MapView.test.ts). */
+export interface UvLayerMap {
+  getSource(id: string): { updateImage(opts: { url: string; coordinates: Coordinates }): void } | undefined;
+  addSource(id: string, source: { type: "image"; url: string; coordinates: Coordinates }): void;
+  getLayer(id: string): unknown;
+  addLayer(
+    layer: { id: string; type: "raster"; source: string; paint: Record<string, unknown> },
+    beforeId?: string
+  ): void;
+}
+
+/**
+ * Brings the map into the correct final state for one UV frame: ensures
+ * the source AND layer both exist (checked independently -- one existing
+ * never implies the other does) and that the source reflects `params`.
+ * Idempotent and side-effect-free when already in the desired state, so
+ * it's safe to call from multiple trigger points (map-ready, data-ready,
+ * a style event, a frame change) in any order or repeatedly -- see the two
+ * call sites in MapView below. This one function is the single source of
+ * truth for "is the UV overlay in the state it should be."
+ */
+export function syncUvLayer(map: UvLayerMap, params: UvFrameParams): void {
+  const { sourceId, layerId, dataUrl, coordinates, beforeLayerCandidate } = params;
+
+  const existingSource = map.getSource(sourceId);
+  if (!existingSource) {
+    map.addSource(sourceId, { type: "image", url: dataUrl, coordinates });
+  } else {
+    existingSource.updateImage({ url: dataUrl, coordinates });
+  }
+
+  if (!map.getLayer(layerId)) {
+    const beforeId = beforeLayerCandidate && map.getLayer(beforeLayerCandidate) ? beforeLayerCandidate : undefined;
+    map.addLayer({ id: layerId, type: "raster", source: sourceId, paint: { "raster-fade-duration": 0 } }, beforeId);
+  }
+}
 
 // The free demotiles.maplibre.org style fills every country with one of a
 // handful of bright, arbitrary colours (a "political map" look) — fine for
@@ -82,6 +137,26 @@ export function MapView({ grid, uv, timeIso, landMask, onSelectLocation, userLoc
   // (Now..+5h), so caching each rendered frame by timestamp makes
   // switching between already-viewed hours instant.
   const frameCacheRef = useRef<Map<string, { url: string; bounds: RenderBounds }>>(new Map());
+  // The most recently computed frame, kept so a defensive resync (see the
+  // "styledata" listener below) can restore the overlay without needing
+  // the effect that computed it to run again.
+  const latestFrameRef = useRef<UvFrameParams | null>(null);
+
+  // True once the map's one-time "load" event has actually fired. This
+  // used to be approximated by calling `map.isStyleLoaded()` at whatever
+  // moment the UV-sync effect happened to run, falling back to
+  // `map.once("load", apply)` if it read false -- but `isStyleLoaded()` is
+  // a point-in-time snapshot (it can read false any time tiles are mid-
+  // fetch, well after "load" already fired once) while `once("load", ...)`
+  // is a ONE-TIME subscription: registering it *after* "load" has already
+  // fired for real means it silently never fires again, and the UV
+  // source/layer never gets added. That mismatch was the root cause of the
+  // intermittent "basemap renders, UV colour never appears" bug. Tracking
+  // readiness as React state instead makes the UV-sync effect below re-run
+  // via React's own dependency mechanism whenever `mapReady` actually
+  // changes, regardless of whether the map or the forecast data became
+  // ready first.
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -96,7 +171,10 @@ export function MapView({ grid, uv, timeIso, landMask, onSelectLocation, userLoc
     });
     map.addControl(new maplibregl.AttributionControl({ compact: true }));
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+
+    let loaded = false;
     map.once("load", () => {
+      loaded = true;
       restyleBasemap(map);
       const initial = initialSelectedLocationRef.current;
       if (initial) {
@@ -104,6 +182,25 @@ export function MapView({ grid, uv, timeIso, landMask, onSelectLocation, userLoc
         // once the map has actually loaded, rather than opening already
         // zoomed in with no sense of where the pin sits globally.
         map.flyTo({ center: [initial.lon, initial.lat], zoom: Math.max(map.getZoom(), 6) });
+      }
+      setMapReady(true);
+    });
+
+    // Defensive resync, not the primary fix (that's `mapReady` above): if
+    // the UV source/layer were ever missing when they shouldn't be -- e.g.
+    // a hypothetical future style reload, which MapLibre-family libraries
+    // typically clear custom sources/layers on -- restore them the next
+    // time the style reports any change, using the last frame we actually
+    // computed. Cheap: two map lookups when everything's already correct
+    // (the overwhelming majority of "styledata" firings), real work only
+    // when something is genuinely missing.
+    map.on("styledata", () => {
+      const frame = latestFrameRef.current;
+      if (!loaded || !frame) return;
+      if (!map.getSource(frame.sourceId) || !map.getLayer(frame.layerId)) {
+        // See the cast note by the other syncUvLayer call below -- we own
+        // this source id and always create it as an image source.
+        syncUvLayer(map as unknown as UvLayerMap, frame);
       }
     });
 
@@ -122,7 +219,13 @@ export function MapView({ grid, uv, timeIso, landMask, onSelectLocation, userLoc
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !grid || !uv || !timeIso || !landMask) return;
+    // `mapReady` (not a live `isStyleLoaded()`/`isStyleLoaded` check) is
+    // the readiness gate -- see the comment on that state above. Because
+    // it's a real dependency, this effect naturally re-runs via React
+    // whenever it flips true, whether that happens before or after
+    // grid/uv/timeIso/landMask are already available; no event-ordering
+    // assumption needed.
+    if (!map || !mapReady || !grid || !uv || !timeIso || !landMask) return;
 
     let frame = frameCacheRef.current.get(timeIso);
     if (!frame) {
@@ -135,33 +238,37 @@ export function MapView({ grid, uv, timeIso, landMask, onSelectLocation, userLoc
     // to (see renderUvFrame / MERCATOR_LAT_LIMIT) — Web Mercator cannot
     // represent the true poles, so these must never be the grid's raw
     // +/-90 extremes.
-    const coordinates: [[number, number], [number, number], [number, number], [number, number]] = [
+    const coordinates: Coordinates = [
       [bounds.west, bounds.north],
       [bounds.east, bounds.north],
       [bounds.east, bounds.south],
       [bounds.west, bounds.south],
     ];
 
-    const apply = () => {
-      const existing = map.getSource(SOURCE_ID) as ImageSource | undefined;
-      if (existing) {
-        existing.updateImage({ url: dataUrl, coordinates });
-      } else {
-        map.addSource(SOURCE_ID, { type: "image", url: dataUrl, coordinates });
-        // Insert below borders/labels (added later in the style) so they
-        // stay visible on top of the raster, and above the neutral
-        // land/ocean fills (added earlier) so the raster reads as the
-        // map's dominant layer.
-        map.addLayer(
-          { id: LAYER_ID, type: "raster", source: SOURCE_ID, paint: { "raster-fade-duration": 0 } },
-          map.getLayer("countries-boundary") ? "countries-boundary" : undefined
-        );
-      }
+    const params: UvFrameParams = {
+      sourceId: SOURCE_ID,
+      layerId: LAYER_ID,
+      dataUrl,
+      coordinates,
+      beforeLayerCandidate: BEFORE_LAYER_CANDIDATE,
     };
+    latestFrameRef.current = params;
 
-    if (map.isStyleLoaded()) apply();
-    else map.once("load", apply);
-  }, [grid, uv, timeIso, landMask]);
+    try {
+      // maplibregl.Map's own getSource() return type is the full Source
+      // union (it can't know statically that SOURCE_ID is always the image
+      // source we create below); this cast is the same trust the original
+      // code placed in it via `as ImageSource`, just expressed through
+      // UvLayerMap's narrower, test-mockable interface instead.
+      syncUvLayer(map as unknown as UvLayerMap, params);
+    } catch (err) {
+      // Deliberately not swallowed into any permanent "already
+      // initialised" flag -- there isn't one, on purpose. The next
+      // "styledata" event or frame change retries via the same idempotent
+      // path rather than leaving the overlay stuck missing.
+      console.error("Failed to sync UV overlay layer:", err);
+    }
+  }, [mapReady, grid, uv, timeIso, landMask]);
 
   useEffect(() => {
     const map = mapRef.current;
