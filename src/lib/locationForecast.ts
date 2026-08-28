@@ -5,7 +5,8 @@
 // getDailyUvSummary/getProtectionAdvice calls uv.ts already uses for the
 // primary result card).
 import { groupByLocalDate, localDateKey, toApproxLocalTime, type PointSample } from "./forecast";
-import { getDailyUvSummary, getProtectionAdvice, type DailyUvSummary, type UvCategory } from "./uv";
+import { getDailyUvSummary, getProtectionAdvice, getProtectionPeriods, type DailyUvSummary, type UvCategory } from "./uv";
+import { getNextSunrise } from "./daynight";
 
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -146,4 +147,62 @@ export function trimToDaylightWindow(samples: PointSample[], padHours = 1): Poin
   const start = Math.max(0, first - padHours);
   const end = Math.min(samples.length - 1, last + padHours);
   return samples.slice(start, end + 1);
+}
+
+// --- Night card: sunrise + upcoming-day forecast ---------------------------
+//
+// At night the useful questions are "when's sunrise" and "what should I
+// expect once it arrives", not a bare "UV 0.0". Everything here is derived
+// from the SAME `days` array the primary card, hourly chart, and 5-day strip
+// already use (see buildLocationForecast) plus getNextSunrise (the same
+// solar-position library isDaylight already uses) -- no separate UV
+// calculation, no separate astronomical system, no separate local-day
+// grouping.
+
+export interface NightOutlook {
+  /** "noSunrise": no sunrise found within the search horizon (polar night,
+   * most likely) -- `sunriseIso`/`day`/`protectionWindow` are all null.
+   * "outlook": a sunrise was found; the rest of the fields describe it. */
+  kind: "noSunrise" | "outlook";
+  sunriseIso: string | null;
+  /** True when the next sunrise falls on the NEXT local calendar date
+   * relative to `nowIso` (compared as real local-date keys, never by
+   * AM/PM) -- false when it's still later on the same local date. */
+  sunriseIsTomorrow: boolean;
+  /** The DayForecast (from the same `days` list passed in) that the
+   * upcoming daylight period belongs to -- null if that local day isn't
+   * present in `days` (e.g. right at the edge of the loaded horizon). */
+  day: DayForecast | null;
+  /** The single contiguous protection period within `day`, if there is
+   * exactly one -- null if there isn't (no protection needed that day, or
+   * more than one separate period, in which case a vaguer "part of the
+   * day" phrasing is more honest than picking one arbitrarily). */
+  protectionWindow: { start: string; end: string } | null;
+}
+
+const NO_SUNRISE_OUTLOOK: NightOutlook = {
+  kind: "noSunrise",
+  sunriseIso: null,
+  sunriseIsTomorrow: false,
+  day: null,
+  protectionWindow: null,
+};
+
+/**
+ * Builds the night card's sunrise + upcoming-day outlook. `days` should be
+ * the same array already computed by buildLocationForecast (today onward)
+ * so the peak this reports can never disagree with the 5-day forecast.
+ */
+export function getNightOutlook(days: DayForecast[], lat: number, lon: number, nowIso: string): NightOutlook {
+  const sunrise = getNextSunrise(lat, lon, nowIso);
+  if (!sunrise) return NO_SUNRISE_OUTLOOK;
+
+  const sunriseIso = sunrise.toISOString();
+  const sunriseIsTomorrow = localDateKey(sunriseIso, lon) !== localDateKey(nowIso, lon);
+  const day = days.find((d) => d.dateKey === localDateKey(sunriseIso, lon)) ?? null;
+
+  const periods = day ? getProtectionPeriods(day.samples) : [];
+  const protectionWindow = periods.length === 1 ? periods[0] : null;
+
+  return { kind: "outlook", sunriseIso, sunriseIsTomorrow, day, protectionWindow };
 }

@@ -16,8 +16,15 @@ interface Props {
    * separate timezone handling. */
   lon: number;
   /** The currently selected hour (Now/+1h..+5h), highlighted on the curve
-   * if it falls within `points`. */
+   * if it falls within `points`. Won't match anything in `points` when this
+   * chart is showing a different day than "now" (e.g. the night card's
+   * upcoming-day outlook) -- that's fine, it just means no point gets the
+   * selected-time marker, not an error. */
   selectedTime: string | null;
+  /** Section heading -- defaults to "UV Today". The night card overrides
+   * this to "UV Tomorrow" when showing the next day's curve instead of
+   * today's, without needing a second chart implementation. */
+  title?: string;
 }
 
 const VIEW_W = 600;
@@ -26,7 +33,7 @@ const MARGIN = { top: 22, right: 12, bottom: 28, left: 12 };
 const PLOT_W = VIEW_W - MARGIN.left - MARGIN.right;
 const PLOT_H = VIEW_H - MARGIN.top - MARGIN.bottom;
 
-export function HourlyUvChart({ points, summary, lon, selectedTime }: Props) {
+export function HourlyUvChart({ points, summary, lon, selectedTime, title = en.hourlyForecastTitle }: Props) {
   if (points.length < 2) return null;
 
   const maxUv = Math.max(PROTECTION_THRESHOLD * 1.3, ...points.map((p) => p.uv)) * 1.15;
@@ -53,7 +60,7 @@ export function HourlyUvChart({ points, summary, lon, selectedTime }: Props) {
 
   return (
     <section className="detail-section">
-      <h2 className="detail-section-title">{en.hourlyForecastTitle}</h2>
+      <h2 className="detail-section-title">{title}</h2>
       <div className="hourly-chart">
       <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} className="hourly-chart-svg" role="img" aria-label={en.hourlyChartAriaLabel}>
         {hasWindowBand && (

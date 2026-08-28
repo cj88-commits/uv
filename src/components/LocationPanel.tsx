@@ -1,7 +1,7 @@
 import { en } from "../locales/en";
 import { getProtectionAdvice, getPrimaryCardTiming, type DailyUvSummary, type PrimaryCardTiming } from "../lib/uv";
 import { toApproxLocalTime, type PointSample } from "../lib/forecast";
-import { trimToDaylightWindow, type DayForecast } from "../lib/locationForecast";
+import { trimToDaylightWindow, getNightOutlook, type DayForecast } from "../lib/locationForecast";
 import { HourlyUvChart } from "./HourlyUvChart";
 import { DailyForecastStrip } from "./DailyForecastStrip";
 import { CloudImpact } from "./CloudImpact";
@@ -51,28 +51,74 @@ export function LocationPanel({
   days,
 }: Props) {
   const chartPoints = trimToDaylightWindow(todaySamples).map((s) => ({ time: s.time, uv: s.uv }));
-  const timing: PrimaryCardTiming = selectedTime ? getPrimaryCardTiming(todaySamples, selectedTime) : { kind: "none" };
 
   if (!isDay) {
-    const note = upcomingNote(timing, lon);
+    const outlook = selectedTime
+      ? getNightOutlook(days, lat, lon, selectedTime)
+      : { kind: "noSunrise" as const, sunriseIso: null, sunriseIsTomorrow: false, day: null, protectionWindow: null };
+
+    const outlookDay = outlook.day;
+    // Fall back to today's own (already-completed) curve/summary if the
+    // upcoming day isn't available for some reason (e.g. right at the edge
+    // of the loaded horizon) or there's no sunrise to look forward to at
+    // all -- never render a blank chart when today's data is right there.
+    const outlookPoints = outlookDay ? trimToDaylightWindow(outlookDay.samples).map((s) => ({ time: s.time, uv: s.uv })) : chartPoints;
+    const outlookSummary = outlookDay ? outlookDay.summary : todaySummary;
+
     return (
       <>
         <div className="location-panel night">
           <div className="headline">{en.night}</div>
-          <p className="body-text">{en.nightBody}</p>
-          <div className="uv-value">
-            {en.currentUv} {uv.toFixed(1)}
-          </div>
-          {note && <p className="body-text">{note}</p>}
+
+          {outlook.kind === "noSunrise" || !outlook.sunriseIso ? (
+            <p className="body-text">{en.nightNoSunrise}</p>
+          ) : (
+            <p className="body-text">
+              {outlook.sunriseIsTomorrow
+                ? en.nightSunriseTomorrow(toApproxLocalTime(outlook.sunriseIso, lon))
+                : en.nightSunrise(toApproxLocalTime(outlook.sunriseIso, lon))}
+            </p>
+          )}
+
+          {outlookDay?.summary.peak && (
+            <>
+              <div className="peak-label">{outlook.sunriseIsTomorrow ? en.tomorrow : en.today}</div>
+              <div className="uv-row">
+                <span className="uv-value">
+                  {en.currentUv} {outlookDay.summary.peak.uv.toFixed(1)}
+                </span>
+                <span className="uv-category">{outlookDay.category ? en.categoryLabel[outlookDay.category] : ""}</span>
+              </div>
+              <p className="body-text">{en.nightPeakAround(toApproxLocalTime(outlookDay.summary.peak.time, lon))}</p>
+              <p className="body-text">
+                {!outlookDay.protectionRecommended
+                  ? en.nightProtectionNotExpected
+                  : outlook.protectionWindow
+                    ? en.nightProtectionExpectedWindow(
+                        toApproxLocalTime(outlook.protectionWindow.start, lon),
+                        toApproxLocalTime(outlook.protectionWindow.end, lon)
+                      )
+                    : en.nightProtectionExpected}
+              </p>
+            </>
+          )}
+
           <Coords lat={lat} lon={lon} />
         </div>
-        <HourlyUvChart points={chartPoints} summary={todaySummary} lon={lon} selectedTime={selectedTime} />
+        <HourlyUvChart
+          points={outlookPoints}
+          summary={outlookSummary}
+          lon={lon}
+          selectedTime={selectedTime}
+          title={outlook.sunriseIsTomorrow ? en.hourlyForecastTitleTomorrow : en.hourlyForecastTitle}
+        />
         <DailyForecastStrip days={days} />
         <CloudImpact forecastUv={uv} clearUv={uvClear} isDay={isDay} />
       </>
     );
   }
 
+  const timing: PrimaryCardTiming = selectedTime ? getPrimaryCardTiming(todaySamples, selectedTime) : { kind: "none" };
   const advice = getProtectionAdvice(uv);
   const category = en.categoryLabel[advice.category];
   const note = upcomingNote(timing, lon);

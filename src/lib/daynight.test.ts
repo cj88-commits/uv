@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { isDaylight } from "./daynight";
+import SunCalc from "suncalc";
+import { isDaylight, getNextSunrise } from "./daynight";
 
 // All expected values verified directly against SunCalc before being
 // written here (see the investigation in the accompanying report) rather
@@ -59,6 +60,77 @@ describe("isDaylight — near the International Date Line", () => {
 
   it("Auckland (UTC+12/13): night at 10:00 UTC (~22:00 NZST)", () => {
     expect(isDaylight(...AUCKLAND, new Date("2026-08-28T10:00:00Z"))).toBe(false);
+  });
+});
+
+// getNextSunrise ground truth is computed directly via SunCalc.getTimes in
+// each test (never hand-transcribed real-world sunrise facts, which would
+// be a second, error-prone source of truth) -- these tests verify
+// getNextSunrise's own day-search logic *around* that ground truth, using
+// the exact same solar-position library isDaylight already depends on.
+describe("getNextSunrise", () => {
+  it("returns today's own sunrise when queried before it has happened yet", () => {
+    const day = new Date("2026-06-21T12:00:00Z"); // near solstice, unambiguous for London
+    const truth = SunCalc.getTimes(day, ...LONDON).sunrise;
+    const justBefore = new Date(truth.getTime() - 3600_000).toISOString(); // 1h before
+    const result = getNextSunrise(...LONDON, justBefore);
+    expect(result?.getTime()).toBe(truth.getTime());
+  });
+
+  it("returns tomorrow's sunrise when queried after today's has already passed", () => {
+    const day = new Date("2026-06-21T12:00:00Z");
+    const truth = SunCalc.getTimes(day, ...LONDON).sunrise;
+    const tomorrowTruth = SunCalc.getTimes(new Date(day.getTime() + 24 * 3600_000), ...LONDON).sunrise;
+    const justAfter = new Date(truth.getTime() + 3600_000).toISOString(); // 1h after today's sunrise
+    const result = getNextSunrise(...LONDON, justAfter);
+    expect(result?.getTime()).toBe(tomorrowTruth.getTime());
+  });
+
+  it("always returns an instant strictly after the given time", () => {
+    for (const iso of ["2026-06-21T04:00:00Z", "2026-06-21T12:00:00Z", "2026-06-21T23:00:00Z"]) {
+      const result = getNextSunrise(...LONDON, iso);
+      expect(result).not.toBeNull();
+      expect(result!.getTime()).toBeGreaterThan(new Date(iso).getTime());
+    }
+  });
+
+  it("works the same way for a location far from UTC (Sydney)", () => {
+    const day = new Date("2026-06-21T00:00:00Z");
+    const truth = SunCalc.getTimes(day, ...SYDNEY).sunrise;
+    const justBefore = new Date(truth.getTime() - 3600_000).toISOString();
+    expect(getNextSunrise(...SYDNEY, justBefore)?.getTime()).toBe(truth.getTime());
+  });
+
+  it("returns null (never an invented time) during genuine polar night", () => {
+    const SVALBARD: [number, number] = [78.2232, 15.6267]; // well inside its documented ~Nov-Jan polar night
+    const deepWinter = "2026-01-01T12:00:00Z";
+    const result = getNextSunrise(...SVALBARD, deepWinter);
+    expect(result).toBeNull();
+  });
+
+  it("returns null during Antarctic polar night (southern winter)", () => {
+    const MCMURDO: [number, number] = [-77.85, 166.6667];
+    const southernWinter = "2026-06-21T00:00:00Z";
+    const result = getNextSunrise(...MCMURDO, southernWinter);
+    expect(result).toBeNull();
+  });
+
+  it("is independent of the browser's configured timezone", () => {
+    const day = new Date("2026-06-21T12:00:00Z");
+    const truth = SunCalc.getTimes(day, ...LONDON).sunrise;
+    const justBefore = new Date(truth.getTime() - 3600_000).toISOString();
+    const originalTz = process.env.TZ;
+    const results: number[] = [];
+    try {
+      for (const tz of ["Europe/London", "America/New_York", "Asia/Manila", "Australia/Sydney", "UTC"]) {
+        process.env.TZ = tz;
+        results.push(getNextSunrise(...LONDON, justBefore)!.getTime());
+      }
+    } finally {
+      process.env.TZ = originalTz;
+    }
+    expect(new Set(results).size).toBe(1);
+    expect(results[0]).toBe(truth.getTime());
   });
 });
 

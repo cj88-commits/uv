@@ -62,7 +62,26 @@ export const en = {
     `Forecast data hasn't been refreshed recently — showing the closest available forecast (${utcTime} UTC), not the live current hour.`,
 
   night: "Night",
-  nightBody: "The sun is below the horizon here right now.",
+  /** Same local calendar date as the current instant -- see getNightOutlook. */
+  nightSunrise: (time: string) => `Sunrise ${time}`,
+  /** Next local calendar date. */
+  nightSunriseTomorrow: (time: string) => `Sunrise ${time} tomorrow`,
+  /** No sunrise found within the search horizon -- polar night. Deliberately
+   * doesn't claim anything about how long that lasts, just that today has
+   * none. */
+  nightNoSunrise: "The sun does not rise today.",
+  nightPeakAround: (time: string) => `Peak around ${time}`,
+  /** Protection recommended on the upcoming day, but not as one single
+   * contiguous window (either genuinely more than one period, or the window
+   * wasn't otherwise determinable) -- see getNightOutlook.protectionWindow. */
+  nightProtectionExpected: "Sun protection will be recommended for part of the day.",
+  /** Protection recommended on the upcoming day as one single window --
+   * preferred over the vaguer nightProtectionExpected above whenever it's
+   * actually known (same threshold/period logic as the daytime card). */
+  nightProtectionExpectedWindow: (start: string, end: string) =>
+    `Sun protection is expected to be recommended from around ${start}–${end}.`,
+  nightProtectionNotExpected: "Sun protection is generally not expected to be required.",
+  tomorrow: "Tomorrow",
 
   legendTitle: "UV Index",
   legendNight: "Night",
@@ -89,6 +108,9 @@ export const en = {
   sheetShowMap: "Show map",
 
   hourlyForecastTitle: "UV Today",
+  /** Shown instead of hourlyForecastTitle when the night card's next
+   * sunrise falls tomorrow, alongside that day's curve -- see LocationPanel. */
+  hourlyForecastTitleTomorrow: "UV Tomorrow",
   hourlyChartAriaLabel: "Hourly UV forecast chart",
   hourlyChartThresholdLabel: (threshold: number) => `Protection threshold (UV ${threshold})`,
 

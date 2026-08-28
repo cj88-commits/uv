@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildLocationForecast, weekdayShortLabel, trimToDaylightWindow } from "./locationForecast";
+import SunCalc from "suncalc";
+import { buildLocationForecast, getNightOutlook, weekdayShortLabel, trimToDaylightWindow } from "./locationForecast";
 import { filterToday, type PointSample } from "./forecast";
 import { getDailyUvSummary } from "./uv";
 
@@ -271,5 +272,146 @@ describe("trimToDaylightWindow", () => {
 
   it("handles an empty array", () => {
     expect(trimToDaylightWindow([])).toEqual([]);
+  });
+});
+
+// getNightOutlook: night card's "sunrise + upcoming day" derivation.
+// Ground-truth sunrise instants come directly from SunCalc (the same
+// library getNextSunrise/isDaylight already use), never hand-transcribed
+// real-world facts -- see the same reasoning in daynight.test.ts.
+describe("getNightOutlook", () => {
+  const LONDON_LAT = 51.5074;
+  const LONDON_LON = -0.1278; // offset 0
+
+  it("pre-sunrise, same local day: TODAY, and the upcoming peak is today's own", () => {
+    const sunriseTruth = SunCalc.getTimes(new Date("2026-06-21T12:00:00Z"), LONDON_LAT, LONDON_LON).sunrise;
+    const nowIso = new Date(sunriseTruth.getTime() - 2 * 3600_000).toISOString(); // 2h before sunrise, same date
+    const series = buildHourlySeries("2026-06-21T00:00:00Z", 24);
+    const forecast = buildLocationForecast(series, LONDON_LON, nowIso);
+
+    const outlook = getNightOutlook(forecast.days, LONDON_LAT, LONDON_LON, nowIso);
+    expect(outlook.kind).toBe("outlook");
+    expect(outlook.sunriseIsTomorrow).toBe(false);
+    expect(outlook.day?.dateKey).toBe("2026-06-21");
+    expect(outlook.day?.summary.peak?.uv).toBe(8); // buildHourlySeries's own peak
+  });
+
+  it("evening, next sunrise tomorrow: TOMORROW, and the upcoming peak is tomorrow's, not tonight's", () => {
+    const nowIso = "2026-06-21T22:26:00Z";
+    const series = buildHourlySeries("2026-06-21T00:00:00Z", 48); // today + tomorrow
+    const forecast = buildLocationForecast(series, LONDON_LON, nowIso);
+
+    const outlook = getNightOutlook(forecast.days, LONDON_LAT, LONDON_LON, nowIso);
+    expect(outlook.kind).toBe("outlook");
+    expect(outlook.sunriseIsTomorrow).toBe(true);
+    expect(outlook.day?.dateKey).toBe("2026-06-22");
+    expect(outlook.day?.summary.peak?.uv).toBe(8);
+    // Must agree with what the 5-day forecast itself would say for that day.
+    const tomorrowInDays = forecast.days.find((d) => d.dateKey === "2026-06-22");
+    expect(outlook.day?.summary.peak?.uv).toBe(tomorrowInDays?.summary.peak?.uv);
+  });
+
+  it("low-UV upcoming day: category Low, not protection-recommended, no single window", () => {
+    const nowIso = "2026-06-21T22:26:00Z";
+    const start = Date.parse("2026-06-21T00:00:00Z");
+    const lowSeries: PointSample[] = Array.from({ length: 48 }, (_, i) => {
+      const t = new Date(start + i * 3600_000);
+      const uv = Math.max(0, 2.2 - Math.abs(t.getUTCHours() - 12) * 0.1); // peaks at 2.2, always below threshold
+      return { time: t.toISOString().replace(".000Z", "Z"), uv, uvClear: uv + 0.3 };
+    });
+    const forecast = buildLocationForecast(lowSeries, LONDON_LON, nowIso);
+
+    const outlook = getNightOutlook(forecast.days, LONDON_LAT, LONDON_LON, nowIso);
+    expect(outlook.day?.category).toBe("low");
+    expect(outlook.day?.protectionRecommended).toBe(false);
+    expect(outlook.protectionWindow).toBeNull();
+  });
+
+  it("upcoming day crossing the threshold: protection recommended, single continuous window", () => {
+    const nowIso = "2026-06-21T22:26:00Z";
+    const series = buildHourlySeries("2026-06-21T00:00:00Z", 48);
+    const forecast = buildLocationForecast(series, LONDON_LON, nowIso);
+
+    const outlook = getNightOutlook(forecast.days, LONDON_LAT, LONDON_LON, nowIso);
+    expect(outlook.day?.protectionRecommended).toBe(true);
+    expect(outlook.day?.category).toBe("very-high"); // uv 8 -> very-high (see uv.ts boundaries)
+    expect(outlook.protectionWindow).toEqual({ start: "2026-06-22T07:00:00Z", end: "2026-06-22T17:00:00Z" });
+  });
+
+  it("agrees with buildLocationForecast's own days array (same array, not a second calculation)", () => {
+    const nowIso = "2026-06-21T22:26:00Z";
+    const series = buildHourlySeries("2026-06-21T00:00:00Z", 48);
+    const forecast = buildLocationForecast(series, LONDON_LON, nowIso);
+    const outlook = getNightOutlook(forecast.days, LONDON_LAT, LONDON_LON, nowIso);
+    // The exact same DayForecast object, not a structurally-similar copy.
+    expect(outlook.day).toBe(forecast.days.find((d) => d.dateKey === "2026-06-22"));
+  });
+
+  it("respects the selected location's own local date even when it differs from the UTC calendar date", () => {
+    const AUCKLAND_LAT = -36.8485;
+    const AUCKLAND_LON = 174.7633; // offset +12
+    const nowIso = "2026-06-21T13:00:00Z"; // Auckland local ~2026-06-22T01:00
+    const series = buildHourlySeries("2026-06-20T00:00:00Z", 24 * 3);
+    const forecast = buildLocationForecast(series, AUCKLAND_LON, nowIso);
+
+    const outlook = getNightOutlook(forecast.days, AUCKLAND_LAT, AUCKLAND_LON, nowIso);
+    expect(outlook.kind).toBe("outlook");
+    // Auckland's own local date at nowIso is 2026-06-22, a full day ahead
+    // of the UTC calendar date (2026-06-21) -- the outlook must be keyed to
+    // Auckland's date, not UTC's.
+    expect(outlook.day?.dateKey).toBe("2026-06-22");
+  });
+
+  it("does not crash or invent data during genuine polar night (no sunrise found)", () => {
+    const SVALBARD_LAT = 78.2232;
+    const SVALBARD_LON = 15.6267;
+    const outlook = getNightOutlook([], SVALBARD_LAT, SVALBARD_LON, "2026-01-01T12:00:00Z");
+    expect(outlook.kind).toBe("noSunrise");
+    expect(outlook.sunriseIso).toBeNull();
+    expect(outlook.day).toBeNull();
+    expect(outlook.protectionWindow).toBeNull();
+    expect(outlook.sunriseIsTomorrow).toBe(false);
+  });
+
+  it("handles an empty days array without throwing", () => {
+    const outlook = getNightOutlook([], LONDON_LAT, LONDON_LON, "2026-06-21T22:26:00Z");
+    expect(outlook.kind).toBe("outlook"); // London always has a sunrise -- just no matching day in `days`
+    expect(outlook.day).toBeNull();
+  });
+
+  it("is independent of the browser's configured timezone", () => {
+    const nowIso = "2026-06-21T22:26:00Z";
+    const series = buildHourlySeries("2026-06-21T00:00:00Z", 48);
+    const forecast = buildLocationForecast(series, LONDON_LON, nowIso);
+    const originalTz = process.env.TZ;
+    const results: string[] = [];
+    try {
+      for (const tz of ["Europe/London", "America/New_York", "Asia/Manila", "Australia/Sydney", "UTC"]) {
+        process.env.TZ = tz;
+        const outlook = getNightOutlook(forecast.days, LONDON_LAT, LONDON_LON, nowIso);
+        results.push(`${outlook.sunriseIsTomorrow}|${outlook.day?.dateKey}`);
+      }
+    } finally {
+      process.env.TZ = originalTz;
+    }
+    expect(new Set(results).size).toBe(1);
+  });
+
+  it("runs cleanly for widely separated real locations (London, New York, Sydney) at the same instant", () => {
+    const nowIso = "2026-06-21T12:00:00Z";
+    for (const { lat, lon } of [
+      { lat: 51.5074, lon: -0.1278 }, // London
+      { lat: 40.7128, lon: -74.006 }, // New York
+      { lat: -33.8688, lon: 151.2093 }, // Sydney
+    ]) {
+      const series = buildHourlySeries("2026-06-19T00:00:00Z", 24 * 4);
+      const forecast = buildLocationForecast(series, lon, nowIso);
+      const outlook = getNightOutlook(forecast.days, lat, lon, nowIso);
+      expect(outlook.kind).toBe("outlook");
+      expect(Number.isNaN(new Date(outlook.sunriseIso!).getTime())).toBe(false);
+      if (outlook.day) {
+        expect(outlook.day.dateKey >= forecast.today!.dateKey).toBe(true);
+      }
+    }
   });
 });
