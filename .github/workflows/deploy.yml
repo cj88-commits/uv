@@ -3,6 +3,15 @@ name: Deploy static site to GitHub Pages
 on:
   push:
     branches: [main]
+  # refresh-cams-data.yml commits and pushes new forecast data using the
+  # default GITHUB_TOKEN. GitHub deliberately does not let a GITHUB_TOKEN-
+  # authenticated push trigger other workflows' `push` events (it's the
+  # anti-recursion guard) -- so without this trigger, a successful data
+  # refresh would sit committed in the repo but never actually get
+  # deployed to Pages. This restores that cascade explicitly.
+  workflow_run:
+    workflows: ["Refresh CAMS UV data"]
+    types: [completed]
   workflow_dispatch: {}
 
 permissions:
@@ -16,6 +25,10 @@ concurrency:
 
 jobs:
   build:
+    # Only deploy on a successful refresh -- a failed refresh (e.g. CAMS
+    # temporarily unavailable) leaves the previous data in place and
+    # shouldn't trigger a no-op rebuild/redeploy.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
