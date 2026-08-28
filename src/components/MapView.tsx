@@ -44,13 +44,15 @@ function restyleBasemap(map: maplibregl.Map) {
     map.setPaintProperty("countries-boundary", "line-color", "rgba(255,255,255,0.35)");
     map.setPaintProperty("countries-boundary", "line-width", 0.6);
     map.setPaintProperty("countries-boundary", "line-opacity", 1);
-    map.setPaintProperty("geolines", "line-color", "rgba(255,255,255,0.3)");
     map.setPaintProperty("countries-label", "text-color", "#ffffff");
     map.setPaintProperty("countries-label", "text-halo-color", "rgba(0,0,0,0.75)");
     map.setPaintProperty("countries-label", "text-halo-width", 1.4);
-    map.setPaintProperty("geolines-label", "text-color", "#bcd6e6");
-    map.setPaintProperty("geolines-label", "text-halo-color", "rgba(0,0,0,0.7)");
-    map.setPaintProperty("geolines-label", "text-halo-width", 1.2);
+    // Equator/Tropics/Arctic Circle reference lines + labels — pure map
+    // trivia, not something the UV forecast needs to explain itself; they
+    // also visually competed with the UV raster. Hidden outright rather
+    // than just recoloured.
+    map.setLayoutProperty("geolines", "visibility", "none");
+    map.setLayoutProperty("geolines-label", "visibility", "none");
     // Crimea is a separate fill layer drawn last in the upstream style
     // (above labels); move it back down with the other neutral fills so
     // it doesn't sit as a stray coloured patch above the raster and labels.
