@@ -151,6 +151,10 @@ export function MapView({ grid, uv, timeIso, landMask, onSelectLocation, userLoc
       userMarkerRef.current = new maplibregl.Marker({ color: "#3b82f6" })
         .setLngLat([userLocation.lon, userLocation.lat])
         .addTo(map);
+      // "Use my location" should bring the map to the location it just
+      // found, not just drop a marker somewhere off-screen -- e.g. a user
+      // browsing another part of the world before tapping the button.
+      map.flyTo({ center: [userLocation.lon, userLocation.lat], zoom: Math.max(map.getZoom(), 6) });
     }
   }, [userLocation]);
 
