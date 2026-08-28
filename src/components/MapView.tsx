@@ -68,6 +68,15 @@ export function MapView({ grid, uv, timeIso, landMask, onSelectLocation, userLoc
   const canvasRef = useRef<HTMLCanvasElement>(document.createElement("canvas"));
   const userMarkerRef = useRef<maplibregl.Marker | null>(null);
   const selectedMarkerRef = useRef<maplibregl.Marker | null>(null);
+  // Captured once, from whatever `selectedLocation` is on this component's
+  // very first render -- a `useRef` initializer runs only then, which is
+  // exactly "was a location already selected before the map ever mounted"
+  // (true for a per-city SEO page's preset city, see App.tsx/presetCity.ts;
+  // always null on the plain homepage, since map clicks/geolocation only
+  // set selectedLocation well after mount). A later click elsewhere must
+  // NOT re-trigger this -- it's a one-time "arrive already zoomed out, then
+  // zoom to the pinned city" reveal, not a general re-fly-on-select.
+  const initialSelectedLocationRef = useRef(selectedLocation);
   // Rendering a frame does a full bilinear resample + sun-position pass
   // (tens of ms). There are only a handful of hours reachable from the UI
   // (Now..+5h), so caching each rendered frame by timestamp makes
@@ -87,7 +96,16 @@ export function MapView({ grid, uv, timeIso, landMask, onSelectLocation, userLoc
     });
     map.addControl(new maplibregl.AttributionControl({ compact: true }));
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-    map.once("load", () => restyleBasemap(map));
+    map.once("load", () => {
+      restyleBasemap(map);
+      const initial = initialSelectedLocationRef.current;
+      if (initial) {
+        // Same reveal as "Use my location": arrive zoomed out, then fly in
+        // once the map has actually loaded, rather than opening already
+        // zoomed in with no sense of where the pin sits globally.
+        map.flyTo({ center: [initial.lon, initial.lat], zoom: Math.max(map.getZoom(), 6) });
+      }
+    });
 
     map.on("click", (e) => {
       onSelectLocation(e.lngLat.lat, e.lngLat.lng);
