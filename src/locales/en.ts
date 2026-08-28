@@ -21,7 +21,6 @@ export const en = {
   willReachThreshold: (threshold: number, time: string) => `UV is forecast to reach ${threshold} at around ${time}.`,
 
   currentUv: "UV",
-  clearSkyPotential: "Clear-sky potential",
   peakToday: "Peak today",
   peakAt: (uv: string, time: string) => `UV ${uv} at ${time}`,
 
@@ -61,6 +60,24 @@ export const en = {
   sheetDragHandleLabel: "Drag to resize",
   sheetSwipeUp: "Swipe up for details",
   sheetShowMap: "Show map",
+
+  hourlyForecastTitle: "UV Today",
+  hourlyChartAriaLabel: "Hourly UV forecast chart",
+  hourlyChartThresholdLabel: (threshold: number) => `Protection threshold (UV ${threshold})`,
+
+  dailyForecastTitle: "5-Day UV Forecast",
+  today: "Today",
+  dailyStripPeakAt: (time: string) => `Peak ${time}`,
+  dailyStripProtectionYes: "Protection recommended",
+  dailyStripProtectionNo: "Protection generally not required",
+
+  cloudImpactTitle: "Cloud Impact",
+  cloudImpactForecastUv: "Forecast UV",
+  cloudImpactClearSkyUv: "Clear-sky potential",
+  cloudImpactModest: "Cloud is having a limited effect on UV.",
+  cloudImpactMeaningful: (percent: number) => `Cloud is reducing forecast UV by about ${percent}%.`,
+  cloudImpactLarge: (percent: number) =>
+    `Cloud is substantially reducing forecast UV (about ${percent}%). If skies clear, UV could rise significantly.`,
 };
 
 export type Locale = typeof en;

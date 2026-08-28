@@ -292,15 +292,210 @@ body,
   font-weight: 600;
 }
 
-.clear-sky {
-  font-size: 0.78rem;
-  color: var(--muted);
-}
-
 .coords {
   font-size: 0.68rem;
   color: var(--muted);
   opacity: 0.7;
+}
+
+/* Secondary forecast detail sections (hourly chart / 5-day forecast / cloud
+   impact) -- each renders itself only when it has something to show (see
+   HourlyUvChart, DailyForecastStrip, CloudImpact), so they simply stack
+   below the primary card via .panel-content's own gap. Deliberately not
+   given card chrome of their own (background/border), unlike
+   .location-panel -- keeps the primary answer visually primary and these
+   read as "more detail below", not competing cards. */
+.detail-section-title {
+  margin: 0 0 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+/* --- Hourly UV chart ------------------------------------------------- */
+
+.hourly-chart {
+  background: var(--panel-bg);
+  border-radius: var(--radius);
+  padding: 0.7rem 0.6rem 0.4rem;
+}
+
+.hourly-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.hourly-chart-window-band {
+  fill: var(--warn);
+  opacity: 0.08;
+}
+
+.hourly-chart-threshold-line {
+  stroke: var(--warn);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  opacity: 0.55;
+}
+
+.hourly-chart-threshold-label {
+  fill: var(--muted);
+  font-size: 9px;
+}
+
+.hourly-chart-area {
+  fill: var(--accent);
+  opacity: 0.14;
+  stroke: none;
+}
+
+.hourly-chart-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hourly-chart-peak-dot {
+  fill: var(--text);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.hourly-chart-peak-label {
+  fill: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.hourly-chart-selected-line {
+  stroke: var(--text);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.5;
+}
+
+.hourly-chart-selected-dot {
+  fill: var(--accent-contrast);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.hourly-chart-axis-label {
+  fill: var(--muted);
+  font-size: 10px;
+}
+
+/* --- 5-day forecast strip --------------------------------------------- */
+
+.daily-strip {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  padding-bottom: 0.15rem;
+  margin: 0 -0.1rem;
+}
+
+.daily-card {
+  flex: 1 1 0;
+  min-width: 84px;
+  scroll-snap-align: start;
+  background: var(--panel-bg);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  text-align: center;
+}
+
+.daily-card-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+.daily-card-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.daily-card-uv {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.daily-card-category {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.daily-card-peak-time {
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.daily-card-protection {
+  font-size: 0.65rem;
+  color: var(--ok);
+  line-height: 1.25;
+}
+
+.daily-card-protection.warn {
+  color: var(--warn);
+}
+
+/* --- Cloud impact -------------------------------------------------------
+   uv.ts's getCloudImpact tier "none" means the whole section renders
+   nothing (see CloudImpact.tsx) -- night/near-zero UV has nothing
+   meaningful to compare. */
+
+.cloud-impact {
+  background: var(--panel-bg);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.cloud-impact-row {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.cloud-impact-stat-label {
+  font-size: 0.68rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.cloud-impact-stat-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.cloud-impact-note {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.cloud-impact-note.emphasis {
+  color: var(--warn);
+  font-weight: 600;
 }
 
 .app-footer-block {

@@ -8,9 +8,12 @@ import {
   nearestHourIndex,
   resolveNow,
   approxUtcOffsetHours,
+  localDateKey,
+  groupByLocalDate,
   type Manifest,
   type HourlyGrid,
   type ManifestGrid,
+  type PointSample,
 } from "./forecast";
 
 describe("decode (int16 x10 wire format)", () => {
@@ -134,5 +137,74 @@ describe("filterToday", () => {
     // lon=0 -> UTC offset 0, "now" on 2026-06-02 keeps only that date's hours
     const result = filterToday(series, 0, "2026-06-02T09:00:00Z");
     expect(result.map((r) => r.time)).toEqual(["2026-06-02T00:00:00Z", "2026-06-02T10:00:00Z"]);
+  });
+});
+
+// Regression coverage for the "day boundaries must be the SELECTED
+// LOCATION's local calendar day, not UTC" requirement — a UTC-grouped-then-
+// relabelled implementation would pass London (lon ~0, offset ~UTC) but
+// fail every other city here.
+describe("localDateKey / groupByLocalDate across timezones", () => {
+  // Approximate longitudes; only the derived UTC-offset approximation
+  // matters here (see approxUtcOffsetHours), not precise city coordinates.
+  const LONDON = 0; // offset 0
+  const NEW_YORK = -74; // offset -5
+  const TOKYO = 139.7; // offset +9
+  const SYDNEY = 151.2; // offset +10
+  const AUCKLAND = 174.8; // offset +12 (date-line-adjacent)
+
+  it("London: local date matches UTC date (offset 0)", () => {
+    expect(localDateKey("2026-06-01T23:30:00Z", LONDON)).toBe("2026-06-01");
+    expect(localDateKey("2026-06-02T00:30:00Z", LONDON)).toBe("2026-06-02");
+  });
+
+  it("New York: local date can still be the PREVIOUS day after UTC midnight", () => {
+    // 2026-06-02T02:00Z is 2026-06-01T21:00 local at UTC-5 -> still June 1st locally.
+    expect(localDateKey("2026-06-02T02:00:00Z", NEW_YORK)).toBe("2026-06-01");
+    expect(localDateKey("2026-06-02T05:00:00Z", NEW_YORK)).toBe("2026-06-02");
+  });
+
+  it("Tokyo: local date rolls over to the NEXT day well before UTC midnight", () => {
+    // 2026-06-01T15:30Z is 2026-06-02T00:30 local at UTC+9 -> already June 2nd locally.
+    expect(localDateKey("2026-06-01T15:30:00Z", TOKYO)).toBe("2026-06-02");
+    expect(localDateKey("2026-06-01T14:00:00Z", TOKYO)).toBe("2026-06-01");
+  });
+
+  it("Sydney: local date rolls over ~10h before UTC midnight", () => {
+    expect(localDateKey("2026-06-01T14:30:00Z", SYDNEY)).toBe("2026-06-02");
+    expect(localDateKey("2026-06-01T13:00:00Z", SYDNEY)).toBe("2026-06-01");
+  });
+
+  it("Auckland: date-line-adjacent, local date is a full day ahead of UTC for most of the UTC day", () => {
+    // 2026-06-01T13:00Z is 2026-06-02T01:00 local at UTC+12.
+    expect(localDateKey("2026-06-01T13:00:00Z", AUCKLAND)).toBe("2026-06-02");
+    expect(localDateKey("2026-06-01T11:00:00Z", AUCKLAND)).toBe("2026-06-01");
+  });
+
+  it("groupByLocalDate groups Tokyo frames into local days, not UTC days", () => {
+    // A UTC-day-grouped-then-relabelled implementation would put all four
+    // of these UTC-01/02 timestamps in (at most) two UTC-keyed buckets;
+    // grouping by Tokyo's actual local date splits them differently.
+    const series: PointSample[] = [
+      { time: "2026-06-01T13:00:00Z", uv: 1, uvClear: 1 }, // local 2026-06-01T22:00
+      { time: "2026-06-01T15:30:00Z", uv: 2, uvClear: 2 }, // local 2026-06-02T00:30
+      { time: "2026-06-02T02:00:00Z", uv: 3, uvClear: 3 }, // local 2026-06-02T11:00
+      { time: "2026-06-02T16:00:00Z", uv: 4, uvClear: 4 }, // local 2026-06-03T01:00
+    ];
+    const groups = groupByLocalDate(series, TOKYO);
+    expect(groups.map((g) => g.dateKey)).toEqual(["2026-06-01", "2026-06-02", "2026-06-03"]);
+    expect(groups[0].samples.map((s) => s.uv)).toEqual([1]);
+    expect(groups[1].samples.map((s) => s.uv)).toEqual([2, 3]);
+    expect(groups[2].samples.map((s) => s.uv)).toEqual([4]);
+  });
+
+  it("groupByLocalDate returns groups in chronological order for a chronological input", () => {
+    const series: PointSample[] = [
+      { time: "2026-06-01T20:00:00Z", uv: 1, uvClear: 1 },
+      { time: "2026-06-02T20:00:00Z", uv: 2, uvClear: 2 },
+      { time: "2026-06-03T20:00:00Z", uv: 3, uvClear: 3 },
+    ];
+    const groups = groupByLocalDate(series, AUCKLAND);
+    expect(groups.map((g) => g.dateKey)).toEqual(["2026-06-02", "2026-06-03", "2026-06-04"]);
   });
 });

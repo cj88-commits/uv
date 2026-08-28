@@ -10,11 +10,11 @@ import {
   loadAllHours,
   resolveNow,
   seriesAtLocation,
-  filterToday,
   type Manifest,
   type HourlyGrid,
 } from "./lib/forecast";
 import { getDailyUvSummary } from "./lib/uv";
+import { buildLocationForecast } from "./lib/locationForecast";
 import { isDaylight } from "./lib/daynight";
 import { loadLandMask, type LandMask } from "./lib/landMask";
 
@@ -116,11 +116,19 @@ export default function App() {
   const locationData = useMemo(() => {
     if (!manifest || !hours || !selectedLocation || !selectedHourEntry) return null;
     const series = seriesAtLocation(manifest, hours, selectedLocation.lat, selectedLocation.lon);
-    const today = filterToday(series, selectedLocation.lon, selectedHourEntry.time);
-    const summary = getDailyUvSummary(today.map((s) => ({ time: s.time, uv: s.uv })));
+    // Single derived representation for this location -- today's summary,
+    // the hourly chart's series, and the multi-day forecast all come from
+    // this one call so they can never disagree (see locationForecast.ts).
+    const forecast = buildLocationForecast(series, selectedLocation.lon, selectedHourEntry.time);
     const current = series.find((s) => s.time === selectedHourEntry.time) ?? series[0];
     const day = isDaylight(selectedLocation.lat, selectedLocation.lon, new Date(selectedHourEntry.time));
-    return { current, summary, today, isDay: day };
+    return {
+      current,
+      isDay: day,
+      todaySummary: forecast.today?.summary ?? getDailyUvSummary([]),
+      todaySamples: forecast.today?.samples ?? [],
+      days: forecast.days,
+    };
   }, [manifest, hours, selectedLocation, selectedHourEntry]);
 
   const loading = !manifest || !hours || !landMask;
@@ -135,8 +143,10 @@ export default function App() {
           isDay={locationData.isDay}
           uv={locationData.current?.uv ?? 0}
           uvClear={locationData.current?.uvClear ?? 0}
-          dailySummary={locationData.summary}
-          todaySeriesForThreshold={locationData.today.map((s) => ({ time: s.time, uv: s.uv }))}
+          selectedTime={selectedHourEntry?.time ?? null}
+          todaySummary={locationData.todaySummary}
+          todaySamples={locationData.todaySamples}
+          days={locationData.days}
         />
       )}
       <div className="app-footer-block">

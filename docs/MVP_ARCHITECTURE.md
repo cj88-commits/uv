@@ -256,6 +256,83 @@ not a per-country political map with a data overlay bolted on.
    `getDailyUvSummary`) — nothing else hard-codes a threshold.
 5. All user-facing copy lives in `src/locales/en.ts`.
 
+## Forecast detail: hourly chart, 5-day forecast, cloud impact
+
+Three additions on top of the same location series described above — no new
+data source, no new backend.
+
+**One derived representation.** `src/lib/locationForecast.ts` builds a
+single `LocationForecast` (`{ today, days }`) from one location's
+`PointSample[]` series. `today` and every entry in `days` are
+`DayForecast`s built via `getDailyUvSummary`/`getProtectionAdvice` — the
+*exact same functions* the primary result card has always used. The primary
+card, the hourly chart, the 5-day strip, and the cloud-impact card in
+`LocationPanel.tsx` all read from this one object (via `App.tsx`'s
+`locationData`), so they cannot independently disagree about "today's peak".
+
+**Local-day grouping** (`groupByLocalDate` in `forecast.ts`) buckets a
+chronological series by each sample's own `localDateKey` (the existing
+longitude/15 approximation — see Limitations) rather than grouping by UTC
+date and relabelling. `filterToday` is now implemented on top of
+`groupByLocalDate` for the same reason: one grouping implementation, not
+two that could drift apart. See `forecast.test.ts` and
+`locationForecast.test.ts` for regression coverage across London, New York,
+Tokyo, Sydney, and Auckland (date-line-adjacent).
+
+**5-day forecast horizon.** `buildLocationForecast` walks local-day groups
+forward from "today" and stops at 5, but a day only appears in `days` if it
+has real coverage: `today` is always included (the primary card already
+answers for it regardless of how many hours are loaded), but any later day
+needs at least `MIN_SAMPLES_FOR_FUTURE_DAY` (6) hourly samples — otherwise
+the CAMS horizon's trailing edge (sometimes a single post-midnight hour)
+would render as a bogus "tomorrow: UV 0.0, peak 00:00" card. This is why the
+committed ~37h dataset in this repo shows only 1-2 days locally; the 5-day
+UI itself is unaffected once a longer-horizon refresh lands (see below).
+
+**Hourly chart** (`HourlyUvChart.tsx`) is a hand-rolled responsive SVG —
+this project had no charting library, and one bell-curve-shaped line for a
+few dozen points didn't justify adding one. `trimToDaylightWindow` in
+`locationForecast.ts` trims the day's samples to the first/last hour with
+UV > 0 (±1h padding) so the chart doesn't waste width on the flat overnight
+stretch; it never claims a separate sunrise/sunset — CAMS's own near-zero
+night values are the trim signal. The chart never recomputes peak/window
+itself; it's passed the same `DailyUvSummary` the primary card renders.
+
+**Cloud impact** (`getCloudImpact` in `uv.ts`) compares the same instant's
+total-sky (`uvbed`) and clear-sky (`uvbedcs`) UV — both fields this project
+already had — with thresholds tuned against exaggerated-percentage failure
+modes, not just "guard division by zero":
+
+| Guard | Constant | Why |
+|---|---|---|
+| Below this clear-sky UV, no comparison is shown at all | `CLOUD_IMPACT_MIN_CLEAR_UV = 0.5` | Night/deep twilight: both values are ~0; nothing to compare, and this also avoids dividing by a near-zero number. |
+| Below this absolute difference, tier is "negligible" regardless of percent | `CLOUD_IMPACT_NEGLIGIBLE_ABS_DIFF = 0.3` | The two fields come from independent parts of the same model; a 0.1 gap (e.g. 5.9 vs 6.0) is rounding noise, not a real cloud effect. |
+| Below this clear-sky UV, emphasis is capped at "modest" even if the percentage is large | `CLOUD_IMPACT_MIN_CLEAR_FOR_STRONG_CLAIM = 2.0` | "Cloud cut UV by 70%" reads as alarming when clear-sky was only UV 1 (already "Low", no protection needed either way). |
+| Percent bands above both floors | <20% modest · 20-49% meaningful · ≥50% large | Ordinary tiering once the above guards rule out noise/low-stakes cases. |
+
+`totalUv` is clamped to never exceed `clearUv` in the diff (independent
+rounding can occasionally put it fractionally above). See `uv.test.ts` for
+the full threshold matrix, including the two named test cases in the
+original spec (4 vs 6 → ~33% "meaningful"; 5.9 vs 6 → no exaggerated
+warning) and explicit divide-by-zero/night coverage.
+
+**Extending the CAMS horizon for the 5-day forecast.**
+`scripts/cams/download_forecast.py` now fetches a *tiered* leadtime: hourly
+out to 36h (unchanged — this is what the map and the hourly chart need),
+then every 3h out to 120h (CAMS's own max horizon) for the 5-day forecast.
+This was a deliberate choice over a flat hourly fetch to 120h: the frontend
+still eagerly downloads every listed hourly file (see above), so a flat
+120h-hourly fetch would ~3.3x that payload, while this tiering keeps it
+under ~1.8x. `process_forecast.py` needed no format changes — it already
+derives everything from the GRIB's own `valid_time`s, so it works
+identically whether the leadtimes it's given are contiguous or not.
+`.github/workflows/refresh-cams-data.yml` was updated to pass
+`--hours 120 --hourly-until 36 --long-range-step 3`. This is a pipeline
+change, not a frontend one — the next scheduled refresh (every 6h, already
+configured with its existing secrets) will start producing enough days for
+a real 5-day forecast with no frontend redeploy required, which is the
+whole point of keeping forecast refreshes and frontend deploys decoupled.
+
 ## Deployment
 
 GitHub Pages via GitHub Actions (`.github/workflows/deploy.yml`): on every

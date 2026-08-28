@@ -97,3 +97,82 @@ export function getFirstHourAtOrAbove(hourly: HourlyUvPoint[], threshold: number
   }
   return null;
 }
+
+// --- Total-sky vs clear-sky ("cloud impact") -------------------------------
+//
+// CAMS gives us two UV fields for the same instant: uvbed (total-sky, i.e.
+// this forecast's expected UV given its own cloud/aerosol/ozone fields) and
+// uvbedcs (clear-sky, the same quantity as if the sky were cloud-free). The
+// gap between them is how much cloud is expected to be suppressing UV below
+// its clear-sky ceiling. This is presentation logic over two CAMS fields we
+// already have — no separate cloud-cover model or data source.
+//
+// Thresholds below are deliberately conservative: a UV Index reading itself
+// only carries ~0.1 of real precision, and the two fields are produced by
+// independent parts of the same model, so small gaps are noise, not signal.
+export type CloudImpactTier = "none" | "negligible" | "modest" | "meaningful" | "large";
+
+export interface CloudImpact {
+  tier: CloudImpactTier;
+  totalUv: number;
+  clearUv: number;
+  /** clearUv - totalUv, clamped to >= 0 (model rounding can occasionally
+   * put totalUv fractionally above clearUv; that is never a real cloud
+   * effect in the other direction). */
+  absoluteDiff: number;
+  /** absoluteDiff as a percentage of clearUv, or null when clearUv is too
+   * low for a percentage to mean anything (see CLOUD_IMPACT_MIN_CLEAR_UV). */
+  percent: number | null;
+}
+
+/** Below this clear-sky UV, both total and clear are effectively "no UV"
+ * (night, deep twilight) — there is nothing meaningful to compare, so no
+ * cloud-impact figure is shown at all rather than dividing by a near-zero
+ * number. */
+export const CLOUD_IMPACT_MIN_CLEAR_UV = 0.5;
+
+/** Below this clear-sky UV, the *category* is already "Low" regardless of
+ * cloud, so even a large relative reduction isn't a meaningful claim (e.g.
+ * "cloud cut UV by 70%" when clear-sky was only UV 1 reads as alarming for
+ * a day that needed no protection either way). Below this floor, emphasis
+ * is capped at "modest" no matter how large the percentage is. */
+export const CLOUD_IMPACT_MIN_CLEAR_FOR_STRONG_CLAIM = 2.0;
+
+/** Absolute differences smaller than this read as model/rounding noise
+ * between the two independently-computed fields, not a real cloud effect —
+ * e.g. total=5.9 vs clear=6.0 should never be presented as "cloud is
+ * reducing UV". */
+export const CLOUD_IMPACT_NEGLIGIBLE_ABS_DIFF = 0.3;
+
+const CLOUD_IMPACT_MODEST_MAX_PERCENT = 20;
+const CLOUD_IMPACT_MEANINGFUL_MAX_PERCENT = 50;
+
+/**
+ * Compares forecast (total-sky) UV against clear-sky potential UV at the
+ * same instant/location and classifies how much cloud is currently expected
+ * to be reducing UV, with guards against divide-by-zero and exaggerated
+ * percentages at low absolute UV (see the threshold constants above).
+ */
+export function getCloudImpact(totalUv: number, clearUv: number): CloudImpact {
+  if (clearUv < CLOUD_IMPACT_MIN_CLEAR_UV) {
+    return { tier: "none", totalUv, clearUv, absoluteDiff: 0, percent: null };
+  }
+
+  const absoluteDiff = Math.max(0, clearUv - totalUv);
+  const percent = (absoluteDiff / clearUv) * 100;
+
+  let tier: CloudImpactTier;
+  if (absoluteDiff < CLOUD_IMPACT_NEGLIGIBLE_ABS_DIFF) {
+    tier = "negligible";
+  } else if (clearUv < CLOUD_IMPACT_MIN_CLEAR_FOR_STRONG_CLAIM) {
+    tier = "modest";
+  } else if (percent < CLOUD_IMPACT_MODEST_MAX_PERCENT) {
+    tier = "modest";
+  } else if (percent < CLOUD_IMPACT_MEANINGFUL_MAX_PERCENT) {
+    tier = "meaningful";
+  } else {
+    tier = "large";
+  }
+
+  return { tier, totalUv, clearUv, absoluteDiff, percent };
+}

@@ -5,6 +5,7 @@ import {
   getDailyUvSummary,
   getFirstHourAtOrAbove,
   uvIndexFromDoseRate,
+  getCloudImpact,
   PROTECTION_THRESHOLD,
 } from "./uv";
 
@@ -110,5 +111,63 @@ describe("getDailyUvSummary", () => {
       lastProtectionHour: null,
       protectionWindow: null,
     });
+  });
+});
+
+describe("getCloudImpact", () => {
+  it("computes the example from the spec: total=4, clear=6 -> ~33% reduction, meaningful", () => {
+    const result = getCloudImpact(4, 6);
+    expect(result.absoluteDiff).toBeCloseTo(2);
+    expect(result.percent).toBeCloseTo(33.33, 1);
+    expect(result.tier).toBe("meaningful");
+  });
+
+  it("does not produce an exaggerated warning for a near-identical pair (rounding noise)", () => {
+    const result = getCloudImpact(5.9, 6);
+    expect(result.absoluteDiff).toBeCloseTo(0.1);
+    expect(result.tier).toBe("negligible");
+  });
+
+  it("never divides by zero when both values are zero (night)", () => {
+    const result = getCloudImpact(0, 0);
+    expect(result.tier).toBe("none");
+    expect(result.percent).toBeNull();
+    expect(result.absoluteDiff).toBe(0);
+    expect(Number.isFinite(result.absoluteDiff)).toBe(true);
+  });
+
+  it("treats any clear-sky value below the 'meaningful comparison' floor as tier none", () => {
+    // e.g. deep twilight: both values tiny, nothing useful to compare.
+    expect(getCloudImpact(0.1, 0.4).tier).toBe("none");
+    expect(getCloudImpact(0.2, 0.3).percent).toBeNull();
+  });
+
+  it("clamps a total-sky value that slightly exceeds clear-sky (independent rounding) to zero diff", () => {
+    const result = getCloudImpact(6.05, 6.0);
+    expect(result.absoluteDiff).toBe(0);
+    expect(result.percent).toBe(0);
+    expect(result.tier).toBe("negligible");
+  });
+
+  it("caps emphasis at 'modest' when clear-sky itself is low, even if the percentage is large", () => {
+    // clear=1.5 is still "Low" category territory (< 3) -- a large relative
+    // cut here shouldn't read as dramatically as the same percentage would
+    // at a high clear-sky value.
+    const result = getCloudImpact(0.3, 1.5);
+    expect(result.percent).toBeGreaterThan(50);
+    expect(result.tier).toBe("modest");
+  });
+
+  it("classifies a large, high-confidence reduction as 'large'", () => {
+    const result = getCloudImpact(1.0, 8.0);
+    expect(result.percent).toBeCloseTo(87.5, 1);
+    expect(result.tier).toBe("large");
+  });
+
+  it("classifies a small-but-real reduction as 'modest'", () => {
+    const result = getCloudImpact(5.5, 6.5);
+    expect(result.absoluteDiff).toBeCloseTo(1);
+    expect(result.percent).toBeCloseTo(15.38, 1);
+    expect(result.tier).toBe("modest");
   });
 });

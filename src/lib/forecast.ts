@@ -121,17 +121,48 @@ export function approxUtcOffsetHours(lon: number): number {
   return Math.round(lon / 15);
 }
 
-function localDateKey(isoTimeUtc: string, lon: number): string {
+/** Approximate local calendar date (YYYY-MM-DD) for a UTC instant at a given
+ * longitude — see approxUtcOffsetHours. Exported so every "group by local
+ * day" consumer (today's filter, the multi-day forecast, tests) shares this
+ * one definition rather than each re-deriving it slightly differently. */
+export function localDateKey(isoTimeUtc: string, lon: number): string {
   const d = new Date(isoTimeUtc);
   const shifted = new Date(d.getTime() + approxUtcOffsetHours(lon) * 3600_000);
   return shifted.toISOString().slice(0, 10);
 }
 
+export interface LocalDayGroup {
+  dateKey: string;
+  samples: PointSample[];
+}
+
+/** Groups a chronological series into consecutive local calendar days at a
+ * given longitude. `series` is assumed chronological (as produced by
+ * seriesAtLocation, which walks manifest.hours in order) so the returned
+ * groups come out in chronological order for free — no separate sort needed. */
+export function groupByLocalDate(series: PointSample[], lon: number): LocalDayGroup[] {
+  const groups: LocalDayGroup[] = [];
+  const indexByKey = new Map<string, number>();
+  for (const point of series) {
+    const key = localDateKey(point.time, lon);
+    let idx = indexByKey.get(key);
+    if (idx === undefined) {
+      idx = groups.length;
+      indexByKey.set(key, idx);
+      groups.push({ dateKey: key, samples: [] });
+    }
+    groups[idx].samples.push(point);
+  }
+  return groups;
+}
+
 /** Filters a location's series down to entries sharing "today" (approximate
- * local date) with `nowIso`. */
+ * local date) with `nowIso`. Implemented on top of groupByLocalDate so this
+ * and the multi-day forecast can never disagree about which frames belong
+ * to which local day. */
 export function filterToday(series: PointSample[], lon: number, nowIso: string): PointSample[] {
   const key = localDateKey(nowIso, lon);
-  return series.filter((p) => localDateKey(p.time, lon) === key);
+  return groupByLocalDate(series, lon).find((g) => g.dateKey === key)?.samples ?? [];
 }
 
 /** Formats a UTC hourly timestamp as an approximate local "HH:00" string for

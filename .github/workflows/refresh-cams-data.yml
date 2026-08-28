@@ -28,12 +28,12 @@ jobs:
 
       - run: pip install -r scripts/cams/requirements.txt
 
-      - name: Download latest CAMS forecast (0-36h)
+      - name: Download latest CAMS forecast (hourly to 36h, every 3h to 120h)
         working-directory: scripts/cams
         env:
           CDSAPI_URL: ${{ secrets.CDSAPI_URL }}
           CDSAPI_KEY: ${{ secrets.CDSAPI_KEY }}
-        run: python download_forecast.py --hours 36
+        run: python download_forecast.py --hours 120 --hourly-until 36 --long-range-step 3
 
       - name: Process into static JSON
         working-directory: scripts/cams
