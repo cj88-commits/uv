@@ -54,6 +54,20 @@ def thin_to_target_grid(da: xr.DataArray) -> xr.DataArray:
     return da.sel(latitude=target_lats, longitude=target_lons, method="nearest")
 
 
+def prune_stale_hourly_files(hours_meta: list[dict]) -> int:
+    """Delete hourly JSON files left over from previous runs that the fresh
+    manifest no longer references, so public/data/hourly doesn't grow
+    unbounded across scheduled refreshes."""
+    hourly_dir = os.path.join(DATA_DIR, "hourly")
+    keep = {os.path.basename(h["file"]) for h in hours_meta}
+    removed = 0
+    for name in os.listdir(hourly_dir):
+        if name.endswith(".json") and name not in keep:
+            os.remove(os.path.join(hourly_dir, name))
+            removed += 1
+    return removed
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--grib", required=True)
@@ -131,6 +145,8 @@ def main() -> None:
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
 
+    removed = prune_stale_hourly_files(hours_meta)
+
     print("\n--- Diagnostics ---")
     print(f"Timestamps ({len(hours_meta)}): {[h['time'] for h in hours_meta]}")
     print(f"Grid dimensions: {NLAT} lat x {NLON} lon (thinned from native 0.4 deg)")
@@ -138,6 +154,7 @@ def main() -> None:
     print(f"Downloaded GRIB size: {raw_size_mb:.2f} MB")
     print(f"Processed JSON size: {processed_bytes / (1024 * 1024):.2f} MB "
           f"across {len(hours_meta)} hourly files + manifest.json")
+    print(f"Pruned {removed} stale hourly file(s) no longer in the manifest")
     print(f"Wrote data to {DATA_DIR}")
 
 

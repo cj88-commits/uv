@@ -1,11 +1,14 @@
 name: Refresh CAMS UV data
 
-# Manual only for this MVP — see docs/MVP_ARCHITECTURE.md for why this isn't
-# scheduled yet. Run it from the Actions tab whenever you want fresh data,
-# then it commits public/data/* back to main, which triggers deploy.yml.
+# Runs every 6h and on manual dispatch. Downloads the latest CAMS run,
+# processes it into public/data/*, prunes hourly files the fresh manifest no
+# longer references (see process_forecast.py:prune_stale_hourly_files), and
+# commits the result back to main, which triggers deploy.yml.
 
 on:
   workflow_dispatch: {}
+  schedule:
+    - cron: "0 */6 * * *"
 
 permissions:
   contents: write

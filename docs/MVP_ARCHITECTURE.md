@@ -264,16 +264,16 @@ Pages artifact, deploy. No servers, no containers, no secrets required for
 this workflow because the forecast data is already committed as static
 files under `public/data/`.
 
-A second, **manual-only** workflow
-(`.github/workflows/refresh-cams-data.yml`) re-runs the download/process
-pipeline in CI and commits the refreshed `public/data/*` back to `main`
-(which then triggers the deploy workflow). It needs two repository
-secrets: `CDSAPI_URL` and `CDSAPI_KEY` (see README for how to obtain and
-set them). This is deliberately not scheduled/cron'd for the MVP — refresh
-it by hand from the Actions tab when you want new data. It is equally
-acceptable to run the two Python scripts locally and commit the resulting
-`public/data/*` files yourself, and to only add the scheduled/automated
-version later if the MVP proves worth investing further in.
+A second workflow (`.github/workflows/refresh-cams-data.yml`) re-runs the
+download/process pipeline in CI and commits the refreshed `public/data/*`
+back to `main` (which then triggers the deploy workflow). It needs two
+repository secrets: `CDSAPI_URL` and `CDSAPI_KEY` (see README for how to
+obtain and set them). It runs on a `cron` schedule every 6h and can also be
+triggered by hand from the Actions tab. Each run's `process_forecast.py`
+step prunes `public/data/hourly/*.json` files the fresh manifest no longer
+references, so the accumulated hourly files don't grow unbounded across
+scheduled refreshes. It is equally acceptable to run the two Python scripts
+locally and commit the resulting `public/data/*` files yourself.
 
 ## Limitations (MVP-quality, by design)
 
@@ -302,8 +302,11 @@ version later if the MVP proves worth investing further in.
   threshold, no SPF-number mapping, no skin-type personalisation.
 - **Basemap dependency**: relies on the free `demotiles.maplibre.org`
   style at runtime; not self-hosted.
-- **No automatic data refresh**: refreshing CAMS data is a manual Action
-  trigger (or local run), not a cron job.
+- **Data refresh cadence**: CAMS data is refreshed on a 6h cron schedule
+  (`.github/workflows/refresh-cams-data.yml`, plus manual Action trigger or
+  local run); this doesn't guarantee freshness beyond that, since the
+  upstream CAMS run itself is only published twice daily and can lag by
+  over 12h (see "Forecast horizon fetched" above).
 - **Land mask resolution**: Natural Earth 50m polygons at 1440×721 —
   coastlines are visually accurate at normal map zoom (verified for
   Britain/Ireland, Scandinavia, Japan, the Philippines, Indonesia) but not
@@ -319,9 +322,8 @@ version later if the MVP proves worth investing further in.
 - A real timezone lookup (e.g. a timezone-boundary dataset) instead of the
   longitude/15 approximation, for an accurate local "today"/midnight
   boundary.
-- Scheduled, automated data refresh (cron'd GitHub Action, or a small
-  serverless function) instead of manual triggering, plus monitoring for
-  failed/stale runs.
+- Monitoring/alerting for failed or stale scheduled refresh runs (the cron
+  GitHub Action currently just fails silently in the Actions tab).
 - Decide on the real spatial/temporal resolution tradeoff (higher-res grid,
   longer horizon) once there's evidence the product is worth the extra
   bandwidth/build-size cost.
