@@ -166,7 +166,7 @@ export default function App() {
       <header className="app-header">
         <div className="app-title-block">
           <div className="brand">{en.appName}</div>
-          <div className="tagline">{en.tagline}</div>
+          <h1 className="tagline">{en.tagline}</h1>
         </div>
       </header>
 

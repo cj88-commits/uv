@@ -62,6 +62,11 @@ body,
 }
 
 .tagline {
+  /* Rendered as a real <h1> (see App.tsx) for SEO -- reset the browser's
+     default h1 margin/font-size so it stays visually identical to the
+     plain-div subtitle it replaced (no header height change). */
+  margin: 0;
+  font-weight: 400;
   color: var(--muted);
   font-size: 0.85rem;
 }
@@ -545,7 +550,7 @@ body,
 }
 
 /* The advice-changing case ("if the clouds clear, protection may be
-   needed") is the highest-value message SunCheck can show -- shown more
+   needed") is the highest-value message this app can show -- shown more
    prominently than the "clouds are limiting an already-recommended
    forecast" case, per spec. */
 .cloud-impact--prominent {

@@ -1,8 +1,8 @@
-# SunCheck UV (working name)
+# SPF? Yes or No
 
 A small, deliberately simple MVP that answers one question:
 
-> **Do I need sunscreen right now?**
+> **Do I need sunscreen today?**
 
 A global map, real forecast data from Copernicus's CAMS service, click (or
 geolocate) a spot, get a plain-language answer plus today's peak UV and the
@@ -95,9 +95,16 @@ gitignored; only the final `public/data/*` files are committed.
 3. Push to `main` — `.github/workflows/deploy.yml` builds and deploys
    automatically. Your site will be live at
    `https://<you>.github.io/<repo>/`.
-4. Update the placeholder `<link rel="canonical">` in `index.html` to that
-   URL once you know it (it's a placeholder until first deploy, per the
-   MVP's minimal-SEO scope).
+4. This repo is prepared for the custom domain `spfyesorno.com`:
+   `public/CNAME` (copied verbatim into every build's output by Vite) and
+   `index.html`'s canonical/Open Graph URLs already point at
+   `https://spfyesorno.com/`. To actually attach the domain: point its DNS
+   at GitHub Pages, then set it under **Settings → Pages → Custom domain**
+   (GitHub verifies the `CNAME` file is present in the deployed output and
+   issues the HTTPS certificate). DNS itself isn't configured by this repo.
+   Deploying to a *different* fork/account without that domain still works
+   unchanged — update `index.html`'s canonical/OG URLs and `public/CNAME`
+   (or delete it) to match instead.
 
 ### Refreshing data via GitHub Actions (optional)
 

@@ -2,8 +2,13 @@
 // sibling file (e.g. src/locales/sv.ts), not component surgery.
 
 export const en = {
-  appName: "SunCheck UV",
-  tagline: "Do I need sunscreen right now?",
+  // Brand wordmark, shown uppercase per the brand style -- distinct from
+  // the actual UV/protection recommendation text below, which stays
+  // scientifically precise (never "SPF YES"/"SPF NO").
+  appName: "SPF? YES OR NO",
+  // Rendered as the page's <h1> (see App.tsx) -- the search-intent question
+  // this whole app answers, not just a decorative subtitle.
+  tagline: "Do I need sunscreen today?",
 
   categoryLabel: {
     low: "Low",
@@ -58,10 +63,10 @@ export const en = {
     "Forecast guidance from CAMS satellite/model data (~40 km resolution), not a live sensor reading. Local cloud cover can change actual UV quickly.",
 
   introText:
-    "SunCheck UV shows a global ultraviolet forecast from the Copernicus Atmosphere " +
-    "Monitoring Service (CAMS). Pick a spot on the map or share your location to see " +
-    "today's UV Index, whether sun protection is recommended right now, and the " +
-    "approximate time of today's peak UV.",
+    "Check the UV forecast for your location and see when sun protection is recommended. " +
+    "SPF? Yes or No uses forecast data from the Copernicus Atmosphere Monitoring Service " +
+    "(CAMS) -- pick a spot on the map or share your location to see today's UV Index, " +
+    "whether protection is recommended right now, and the approximate time of today's peak UV.",
 
   protectionSectionTitle: "Recommended sun protection",
 
