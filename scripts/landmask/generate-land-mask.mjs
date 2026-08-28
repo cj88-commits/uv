@@ -9,6 +9,17 @@
 // inland seas that are holes in the land polygon are excluded correctly)
 // rather than per-pixel point-in-polygon, which would be far too slow at
 // ~1M output pixels against ~60k source vertices.
+//
+// The scan direction is *vertical* (fixed longitude, sweeping latitude),
+// not horizontal. A horizontal (fixed-latitude) scanline has to assume
+// "ocean" at the lon=+/-180 seam to seed its left-to-right alternation —
+// which is false wherever a landmass genuinely straddles the antimeridian
+// (Russia's Chukotka coast does, north of ~54 deg N), corrupting every
+// crossing pairing for the rest of that scanline and producing large false
+// gaps (verified: this silently deleted most of Scandinavia/Urals/Siberia
+// around the Arctic Circle). Latitude never wraps and there is provably no
+// land at the true North Pole, so a vertical scan can seed its alternation
+// at lat=90 with zero assumptions and no seam ambiguity.
 import { feature } from "topojson-client";
 import { PNG } from "pngjs";
 import fs from "node:fs";
@@ -36,38 +47,7 @@ function collectEdges(geometry) {
       for (let i = 0; i < ring.length - 1; i++) {
         const [lon1, lat1] = ring[i];
         const [lon2, lat2] = ring[i + 1];
-        if (lat1 === lat2) continue; // horizontal edges never cross a scanline
-
-        if (Math.abs(lon2 - lon1) > 180) {
-          // A raw jump >180 deg is often NOT a genuine antimeridian
-          // crossing — e.g. lon1=179.9, lon2=-180 is really a ~0.1 deg
-          // edge that only looks huge because of the +180/-180 sign flip.
-          // Unwrap first to find the true (shortest-path) delta, then only
-          // split if that unwrapped endpoint genuinely lands outside
-          // [-180, 180].
-          let lon2u = lon2;
-          if (lon2u - lon1 > 180) lon2u -= 360;
-          else if (lon2u - lon1 < -180) lon2u += 360;
-
-          if (lon2u > 180 || lon2u < -180) {
-            // Genuine crossing (e.g. Wrangel Island / Chukotka). Simply
-            // dropping it would leave the ring "open" at these rows,
-            // producing an off-by-one crossing count that corrupts the
-            // even-odd fill for the *entire* scanline, not just locally —
-            // this was the actual cause of a spurious full-width band
-            // during development. Split it at the seam instead, so both
-            // halves are ordinary, closed, non-wrapping edges.
-            const seam = lon2u > 180 ? 180 : -180;
-            const t = (seam - lon1) / (lon2u - lon1);
-            const latCross = lat1 + (lat2 - lat1) * t;
-            edges.push([lon1, lat1, seam, latCross]);
-            edges.push([-seam, latCross, lon2, lat2]);
-          } else {
-            edges.push([lon1, lat1, lon2u, lat2]);
-          }
-          continue;
-        }
-
+        if (lon1 === lon2) continue; // vertical edges never cross a meridian
         edges.push([lon1, lat1, lon2, lat2]);
       }
     }
@@ -75,33 +55,46 @@ function collectEdges(geometry) {
   return edges;
 }
 
+/** Signed shortest angular delta from `from` to `to`, in (-180, 180]. */
+function shortestDelta(from, to) {
+  return ((((to - from) % 360) + 540) % 360) - 180;
+}
+
 function rasterize(edges) {
   const mask = new Uint8Array(WIDTH * HEIGHT);
-  for (let py = 0; py < HEIGHT; py++) {
-    // A tiny epsilon nudge avoids the scanline landing exactly on a vertex
-    // latitude — topojson's coordinate quantization snaps many originally-
-    // distinct vertices (across unrelated rings/continents) onto the same
-    // rounded latitude, and without this a scanline hitting that exact
-    // value could pick up an odd number of crossings from many rings at
-    // once, producing a spurious full-width fill at that one row.
-    const lat = NORTH + ((SOUTH - NORTH) * py) / (HEIGHT - 1) + 1e-7;
+  for (let px = 0; px < WIDTH; px++) {
+    // A tiny epsilon nudge avoids the scan meridian landing exactly on a
+    // vertex longitude — topojson's coordinate quantization snaps many
+    // originally-distinct vertices onto the same rounded longitude, and
+    // without this a column hitting that exact value could pick up an odd
+    // number of crossings from many rings at once.
+    const lon = WEST + ((EAST - WEST) * px) / WIDTH + 1e-7;
     const crossings = [];
     for (const [lon1, lat1, lon2, lat2] of edges) {
-      const inRange = (lat1 <= lat && lat < lat2) || (lat2 <= lat && lat < lat1);
+      // Unwrap this one edge to its true short-path span, then bring the
+      // scan meridian into that same local branch, so a genuine
+      // antimeridian-straddling edge (e.g. Chukotka) is handled correctly
+      // without any global/cumulative bookkeeping.
+      const lon2u = lon1 + shortestDelta(lon1, lon2);
+      const lonu = lon1 + shortestDelta(lon1, lon);
+      const inRange = (lon1 <= lonu && lonu < lon2u) || (lon2u <= lonu && lonu < lon1);
       if (!inRange) continue;
-      const t = (lat - lat1) / (lat2 - lat1);
-      crossings.push(lon1 + (lon2 - lon1) * t);
+      const t = (lonu - lon1) / (lon2u - lon1);
+      crossings.push(lat1 + (lat2 - lat1) * t);
     }
-    crossings.sort((a, b) => a - b);
+    // Descending (north to south): alternation starts from lat=90, the
+    // true North Pole, which is unconditionally ocean — no assumption
+    // needed, unlike seeding at a fixed longitude.
+    crossings.sort((a, b) => b - a);
 
     for (let i = 0; i + 1 < crossings.length; i += 2) {
-      const lonStart = crossings[i];
-      const lonEnd = crossings[i + 1];
-      let pxStart = Math.round(((lonStart - WEST) / (EAST - WEST)) * WIDTH);
-      let pxEnd = Math.round(((lonEnd - WEST) / (EAST - WEST)) * WIDTH);
-      pxStart = Math.max(0, Math.min(WIDTH - 1, pxStart));
-      pxEnd = Math.max(0, Math.min(WIDTH - 1, pxEnd));
-      for (let px = pxStart; px <= pxEnd; px++) {
+      const latStart = crossings[i];
+      const latEnd = crossings[i + 1];
+      let pyStart = Math.round(((latStart - NORTH) / (SOUTH - NORTH)) * (HEIGHT - 1));
+      let pyEnd = Math.round(((latEnd - NORTH) / (SOUTH - NORTH)) * (HEIGHT - 1));
+      pyStart = Math.max(0, Math.min(HEIGHT - 1, pyStart));
+      pyEnd = Math.max(0, Math.min(HEIGHT - 1, pyEnd));
+      for (let py = pyStart; py <= pyEnd; py++) {
         mask[py * WIDTH + px] = 1;
       }
     }
