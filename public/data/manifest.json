@@ -1,8 +1,8 @@
 {
   "source": "CAMS global atmospheric composition forecasts",
   "dataset_id": "cams-global-atmospheric-composition-forecasts",
-  "run": "2026-09-07T12:00Z",
-  "generated_at": "2026-09-08T03:11:57.236516Z",
+  "run": "2026-09-08T00:00Z",
+  "generated_at": "2026-09-08T10:38:55.604764Z",
   "attribution": "Generated using Copernicus Atmosphere Monitoring Service information 2026",
   "licence": "CC-BY 4.0 (Licence to use Copernicus Products)",
   "uv_index_factor": 40,
@@ -20,329 +20,329 @@
   },
   "hours": [
     {
-      "time": "2026-09-07T12:00:00Z",
-      "offset_hours": 0,
-      "file": "hourly/2026-09-07T120000Z.json"
-    },
-    {
-      "time": "2026-09-07T13:00:00Z",
-      "offset_hours": 1,
-      "file": "hourly/2026-09-07T130000Z.json"
-    },
-    {
-      "time": "2026-09-07T14:00:00Z",
-      "offset_hours": 2,
-      "file": "hourly/2026-09-07T140000Z.json"
-    },
-    {
-      "time": "2026-09-07T15:00:00Z",
-      "offset_hours": 3,
-      "file": "hourly/2026-09-07T150000Z.json"
-    },
-    {
-      "time": "2026-09-07T16:00:00Z",
-      "offset_hours": 4,
-      "file": "hourly/2026-09-07T160000Z.json"
-    },
-    {
-      "time": "2026-09-07T17:00:00Z",
-      "offset_hours": 5,
-      "file": "hourly/2026-09-07T170000Z.json"
-    },
-    {
-      "time": "2026-09-07T18:00:00Z",
-      "offset_hours": 6,
-      "file": "hourly/2026-09-07T180000Z.json"
-    },
-    {
-      "time": "2026-09-07T19:00:00Z",
-      "offset_hours": 7,
-      "file": "hourly/2026-09-07T190000Z.json"
-    },
-    {
-      "time": "2026-09-07T20:00:00Z",
-      "offset_hours": 8,
-      "file": "hourly/2026-09-07T200000Z.json"
-    },
-    {
-      "time": "2026-09-07T21:00:00Z",
-      "offset_hours": 9,
-      "file": "hourly/2026-09-07T210000Z.json"
-    },
-    {
-      "time": "2026-09-07T22:00:00Z",
-      "offset_hours": 10,
-      "file": "hourly/2026-09-07T220000Z.json"
-    },
-    {
-      "time": "2026-09-07T23:00:00Z",
-      "offset_hours": 11,
-      "file": "hourly/2026-09-07T230000Z.json"
-    },
-    {
       "time": "2026-09-08T00:00:00Z",
-      "offset_hours": 12,
+      "offset_hours": 0,
       "file": "hourly/2026-09-08T000000Z.json"
     },
     {
       "time": "2026-09-08T01:00:00Z",
-      "offset_hours": 13,
+      "offset_hours": 1,
       "file": "hourly/2026-09-08T010000Z.json"
     },
     {
       "time": "2026-09-08T02:00:00Z",
-      "offset_hours": 14,
+      "offset_hours": 2,
       "file": "hourly/2026-09-08T020000Z.json"
     },
     {
       "time": "2026-09-08T03:00:00Z",
-      "offset_hours": 15,
+      "offset_hours": 3,
       "file": "hourly/2026-09-08T030000Z.json"
     },
     {
       "time": "2026-09-08T04:00:00Z",
-      "offset_hours": 16,
+      "offset_hours": 4,
       "file": "hourly/2026-09-08T040000Z.json"
     },
     {
       "time": "2026-09-08T05:00:00Z",
-      "offset_hours": 17,
+      "offset_hours": 5,
       "file": "hourly/2026-09-08T050000Z.json"
     },
     {
       "time": "2026-09-08T06:00:00Z",
-      "offset_hours": 18,
+      "offset_hours": 6,
       "file": "hourly/2026-09-08T060000Z.json"
     },
     {
       "time": "2026-09-08T07:00:00Z",
-      "offset_hours": 19,
+      "offset_hours": 7,
       "file": "hourly/2026-09-08T070000Z.json"
     },
     {
       "time": "2026-09-08T08:00:00Z",
-      "offset_hours": 20,
+      "offset_hours": 8,
       "file": "hourly/2026-09-08T080000Z.json"
     },
     {
       "time": "2026-09-08T09:00:00Z",
-      "offset_hours": 21,
+      "offset_hours": 9,
       "file": "hourly/2026-09-08T090000Z.json"
     },
     {
       "time": "2026-09-08T10:00:00Z",
-      "offset_hours": 22,
+      "offset_hours": 10,
       "file": "hourly/2026-09-08T100000Z.json"
     },
     {
       "time": "2026-09-08T11:00:00Z",
-      "offset_hours": 23,
+      "offset_hours": 11,
       "file": "hourly/2026-09-08T110000Z.json"
     },
     {
       "time": "2026-09-08T12:00:00Z",
-      "offset_hours": 24,
+      "offset_hours": 12,
       "file": "hourly/2026-09-08T120000Z.json"
     },
     {
       "time": "2026-09-08T13:00:00Z",
-      "offset_hours": 25,
+      "offset_hours": 13,
       "file": "hourly/2026-09-08T130000Z.json"
     },
     {
       "time": "2026-09-08T14:00:00Z",
-      "offset_hours": 26,
+      "offset_hours": 14,
       "file": "hourly/2026-09-08T140000Z.json"
     },
     {
       "time": "2026-09-08T15:00:00Z",
-      "offset_hours": 27,
+      "offset_hours": 15,
       "file": "hourly/2026-09-08T150000Z.json"
     },
     {
       "time": "2026-09-08T16:00:00Z",
-      "offset_hours": 28,
+      "offset_hours": 16,
       "file": "hourly/2026-09-08T160000Z.json"
     },
     {
       "time": "2026-09-08T17:00:00Z",
-      "offset_hours": 29,
+      "offset_hours": 17,
       "file": "hourly/2026-09-08T170000Z.json"
     },
     {
       "time": "2026-09-08T18:00:00Z",
-      "offset_hours": 30,
+      "offset_hours": 18,
       "file": "hourly/2026-09-08T180000Z.json"
     },
     {
       "time": "2026-09-08T19:00:00Z",
-      "offset_hours": 31,
+      "offset_hours": 19,
       "file": "hourly/2026-09-08T190000Z.json"
     },
     {
       "time": "2026-09-08T20:00:00Z",
-      "offset_hours": 32,
+      "offset_hours": 20,
       "file": "hourly/2026-09-08T200000Z.json"
     },
     {
       "time": "2026-09-08T21:00:00Z",
-      "offset_hours": 33,
+      "offset_hours": 21,
       "file": "hourly/2026-09-08T210000Z.json"
     },
     {
       "time": "2026-09-08T22:00:00Z",
-      "offset_hours": 34,
+      "offset_hours": 22,
       "file": "hourly/2026-09-08T220000Z.json"
     },
     {
       "time": "2026-09-08T23:00:00Z",
-      "offset_hours": 35,
+      "offset_hours": 23,
       "file": "hourly/2026-09-08T230000Z.json"
     },
     {
       "time": "2026-09-09T00:00:00Z",
-      "offset_hours": 36,
+      "offset_hours": 24,
       "file": "hourly/2026-09-09T000000Z.json"
     },
     {
+      "time": "2026-09-09T01:00:00Z",
+      "offset_hours": 25,
+      "file": "hourly/2026-09-09T010000Z.json"
+    },
+    {
+      "time": "2026-09-09T02:00:00Z",
+      "offset_hours": 26,
+      "file": "hourly/2026-09-09T020000Z.json"
+    },
+    {
       "time": "2026-09-09T03:00:00Z",
-      "offset_hours": 39,
+      "offset_hours": 27,
       "file": "hourly/2026-09-09T030000Z.json"
     },
     {
+      "time": "2026-09-09T04:00:00Z",
+      "offset_hours": 28,
+      "file": "hourly/2026-09-09T040000Z.json"
+    },
+    {
+      "time": "2026-09-09T05:00:00Z",
+      "offset_hours": 29,
+      "file": "hourly/2026-09-09T050000Z.json"
+    },
+    {
       "time": "2026-09-09T06:00:00Z",
-      "offset_hours": 42,
+      "offset_hours": 30,
       "file": "hourly/2026-09-09T060000Z.json"
     },
     {
+      "time": "2026-09-09T07:00:00Z",
+      "offset_hours": 31,
+      "file": "hourly/2026-09-09T070000Z.json"
+    },
+    {
+      "time": "2026-09-09T08:00:00Z",
+      "offset_hours": 32,
+      "file": "hourly/2026-09-09T080000Z.json"
+    },
+    {
       "time": "2026-09-09T09:00:00Z",
-      "offset_hours": 45,
+      "offset_hours": 33,
       "file": "hourly/2026-09-09T090000Z.json"
     },
     {
+      "time": "2026-09-09T10:00:00Z",
+      "offset_hours": 34,
+      "file": "hourly/2026-09-09T100000Z.json"
+    },
+    {
+      "time": "2026-09-09T11:00:00Z",
+      "offset_hours": 35,
+      "file": "hourly/2026-09-09T110000Z.json"
+    },
+    {
       "time": "2026-09-09T12:00:00Z",
-      "offset_hours": 48,
+      "offset_hours": 36,
       "file": "hourly/2026-09-09T120000Z.json"
     },
     {
       "time": "2026-09-09T15:00:00Z",
-      "offset_hours": 51,
+      "offset_hours": 39,
       "file": "hourly/2026-09-09T150000Z.json"
     },
     {
       "time": "2026-09-09T18:00:00Z",
-      "offset_hours": 54,
+      "offset_hours": 42,
       "file": "hourly/2026-09-09T180000Z.json"
     },
     {
       "time": "2026-09-09T21:00:00Z",
-      "offset_hours": 57,
+      "offset_hours": 45,
       "file": "hourly/2026-09-09T210000Z.json"
     },
     {
       "time": "2026-09-10T00:00:00Z",
-      "offset_hours": 60,
+      "offset_hours": 48,
       "file": "hourly/2026-09-10T000000Z.json"
     },
     {
       "time": "2026-09-10T03:00:00Z",
-      "offset_hours": 63,
+      "offset_hours": 51,
       "file": "hourly/2026-09-10T030000Z.json"
     },
     {
       "time": "2026-09-10T06:00:00Z",
-      "offset_hours": 66,
+      "offset_hours": 54,
       "file": "hourly/2026-09-10T060000Z.json"
     },
     {
       "time": "2026-09-10T09:00:00Z",
-      "offset_hours": 69,
+      "offset_hours": 57,
       "file": "hourly/2026-09-10T090000Z.json"
     },
     {
       "time": "2026-09-10T12:00:00Z",
-      "offset_hours": 72,
+      "offset_hours": 60,
       "file": "hourly/2026-09-10T120000Z.json"
     },
     {
       "time": "2026-09-10T15:00:00Z",
-      "offset_hours": 75,
+      "offset_hours": 63,
       "file": "hourly/2026-09-10T150000Z.json"
     },
     {
       "time": "2026-09-10T18:00:00Z",
-      "offset_hours": 78,
+      "offset_hours": 66,
       "file": "hourly/2026-09-10T180000Z.json"
     },
     {
       "time": "2026-09-10T21:00:00Z",
-      "offset_hours": 81,
+      "offset_hours": 69,
       "file": "hourly/2026-09-10T210000Z.json"
     },
     {
       "time": "2026-09-11T00:00:00Z",
-      "offset_hours": 84,
+      "offset_hours": 72,
       "file": "hourly/2026-09-11T000000Z.json"
     },
     {
       "time": "2026-09-11T03:00:00Z",
-      "offset_hours": 87,
+      "offset_hours": 75,
       "file": "hourly/2026-09-11T030000Z.json"
     },
     {
       "time": "2026-09-11T06:00:00Z",
-      "offset_hours": 90,
+      "offset_hours": 78,
       "file": "hourly/2026-09-11T060000Z.json"
     },
     {
       "time": "2026-09-11T09:00:00Z",
-      "offset_hours": 93,
+      "offset_hours": 81,
       "file": "hourly/2026-09-11T090000Z.json"
     },
     {
       "time": "2026-09-11T12:00:00Z",
-      "offset_hours": 96,
+      "offset_hours": 84,
       "file": "hourly/2026-09-11T120000Z.json"
     },
     {
       "time": "2026-09-11T15:00:00Z",
-      "offset_hours": 99,
+      "offset_hours": 87,
       "file": "hourly/2026-09-11T150000Z.json"
     },
     {
       "time": "2026-09-11T18:00:00Z",
-      "offset_hours": 102,
+      "offset_hours": 90,
       "file": "hourly/2026-09-11T180000Z.json"
     },
     {
       "time": "2026-09-11T21:00:00Z",
-      "offset_hours": 105,
+      "offset_hours": 93,
       "file": "hourly/2026-09-11T210000Z.json"
     },
     {
       "time": "2026-09-12T00:00:00Z",
-      "offset_hours": 108,
+      "offset_hours": 96,
       "file": "hourly/2026-09-12T000000Z.json"
     },
     {
       "time": "2026-09-12T03:00:00Z",
-      "offset_hours": 111,
+      "offset_hours": 99,
       "file": "hourly/2026-09-12T030000Z.json"
     },
     {
       "time": "2026-09-12T06:00:00Z",
-      "offset_hours": 114,
+      "offset_hours": 102,
       "file": "hourly/2026-09-12T060000Z.json"
     },
     {
       "time": "2026-09-12T09:00:00Z",
-      "offset_hours": 117,
+      "offset_hours": 105,
       "file": "hourly/2026-09-12T090000Z.json"
     },
     {
       "time": "2026-09-12T12:00:00Z",
-      "offset_hours": 120,
+      "offset_hours": 108,
       "file": "hourly/2026-09-12T120000Z.json"
+    },
+    {
+      "time": "2026-09-12T15:00:00Z",
+      "offset_hours": 111,
+      "file": "hourly/2026-09-12T150000Z.json"
+    },
+    {
+      "time": "2026-09-12T18:00:00Z",
+      "offset_hours": 114,
+      "file": "hourly/2026-09-12T180000Z.json"
+    },
+    {
+      "time": "2026-09-12T21:00:00Z",
+      "offset_hours": 117,
+      "file": "hourly/2026-09-12T210000Z.json"
+    },
+    {
+      "time": "2026-09-13T00:00:00Z",
+      "offset_hours": 120,
+      "file": "hourly/2026-09-13T000000Z.json"
     }
   ]
 }
